@@ -107,7 +107,7 @@ SENSORS: tuple[Mc5000SensorDescription, ...] = (
         translation_key="operation",
         device_class=SensorDeviceClass.ENUM,
         options=OPERATION_OPTIONS,
-        value_fn=lambda d: d.operation.name.lower() if d.operation else None,
+        value_fn=lambda d: d.operation.name.lower() if d.operation is not None else None,
     ),
     Mc5000SensorDescription(
         key="chemistry",

@@ -78,6 +78,8 @@ async def test_sensors(hass: HomeAssistant, mock_charger) -> None:
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_status").state == "standby"
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_chemistry").state == "nimh"
+    # Charge is operation code 0; it must not read as unknown.
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_operation").state == "charge"
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_3_voltage").state == "3.518"
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_3_chemistry").state == "liion"
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_internal_resistance").state == "unknown"
