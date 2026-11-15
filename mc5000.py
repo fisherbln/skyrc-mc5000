@@ -323,10 +323,21 @@ async def cmd_start(a):
                 break
         else:
             print("no ack (check the charger screen)")
-        await asyncio.sleep(5)  # cell detection + IR test before it reports charging
-        for s in ([int(a.slot)] if a.slot != "all" else range(1, 5)):
-            st = await c.status(s)
+        # The slot stays in standby for a few seconds (NiMH) to ~30 s (Li-ion)
+        # while the charger detects the cell and measures IR, so poll until it starts.
+        slots = [int(a.slot)] if a.slot != "all" else list(range(1, 5))
+        deadline = time.monotonic() + 45
+        while True:
+            await asyncio.sleep(3)
+            states = {s: await c.status(s) for s in slots}
+            started = all(st and st.get("status") not in ("standby", "ready") for st in states.values())
+            if started or time.monotonic() > deadline:
+                break
+            print("  waiting for the charger to start ...", file=sys.stderr)
+        for s, st in states.items():
             print(fmt_status(st) if st else f"slot {s}: no response")
+        if not started:
+            print("not running yet - check the charger screen")
 
 
 async def cmd_sysinfo(a):

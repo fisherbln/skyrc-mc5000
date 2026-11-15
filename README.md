@@ -17,7 +17,8 @@ charger supports.
 | Stop slot / all slots | `0xFE` | ✅ |
 | Program + start (NiMH charge) | `0x94` | ✅ |
 | Program + start (NiMH discharge) | `0x94` | ✅ |
-| Li-ion / LiFePO4 / other chemistries | `0x94` | not yet |
+| Program + start (Li-ion charge, 1 A on a 21700) | `0x94` | ✅ |
+| LiFePO4 / other chemistries | `0x94` | not yet |
 | System settings read/write, USB-C PD status | `0x96` / `0x95` / `0x9B` | not yet |
 
 Tested on one MC5000 (Nov 2026) from macOS. Reports from other firmware versions and

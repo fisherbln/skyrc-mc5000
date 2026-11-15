@@ -9,7 +9,7 @@ reuses the NC3000 command set. Key classes: `app/Cmd.java` (frame builders),
 
 Status: frame format, status decode and stop/start encoding are from the app.
 Start payload is verified byte-identical to the app's own code (300 random programs).
-Status, stop and start verified on hardware (see Transport).
+Status, stop and start (NiMH charge/discharge, Li-ion charge) verified on hardware (see Transport).
 
 ## Transport
 
@@ -28,6 +28,8 @@ Status, stop and start verified on hardware (see Transport).
   Start (`0x94`) confirmed: ack `0f 04 94 <mask> 01 <sum>`, then the slot stays in standby
   for a few seconds (detection + IR test) before reporting charging. NiMH 300 mA charge
   on slot 1 ran at exactly 300 mA, IR reported at 61 mΩ. Temperature read 0 with no probe.
+  Li-ion charge at 1 A (21700, slot 3) ran at 995–1001 mA, IR 40 mΩ; it took longer than
+  5 s to leave standby. NiMH discharge at 500 mA held 501 mA.
 
 ## Framing
 
