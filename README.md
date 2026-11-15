@@ -23,7 +23,7 @@ charger supports.
 | Program + start (Li-ion charge, 1 A on a 21700) | `0x94` | ✅ |
 | LiFePO4 / other chemistries | `0x94` | not yet |
 | System settings read/write, USB-C PD status | `0x96` / `0x95` / `0x9B` | not yet |
-| Home Assistant integration through an ESPHome Bluetooth proxy (status, stop) | | ✅ |
+| Home Assistant integration through an ESPHome Bluetooth proxy (status, stop, start) | | ✅ |
 
 Tested on one MC5000 (Nov 2026) from macOS. Reports from other firmware versions and
 platforms are welcome. Please open an issue with `-v` output.
