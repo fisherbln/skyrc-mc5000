@@ -240,3 +240,12 @@ async def test_dropped_connection_marks_unavailable(hass: HomeAssistant, mock_ch
     await coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == STATE_UNAVAILABLE
+
+
+async def test_disconnects_when_home_assistant_stops(hass: HomeAssistant, mock_charger) -> None:
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+
+    await _setup(hass)
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+    await hass.async_block_till_done()
+    mock_charger.disconnect.assert_awaited()

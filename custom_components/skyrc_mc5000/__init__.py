@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
+from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
@@ -125,6 +125,15 @@ def _coordinator_for_call(hass: HomeAssistant, call: ServiceCall) -> Mc5000Coord
 async def async_setup_entry(hass: HomeAssistant, entry: Mc5000ConfigEntry) -> bool:
     coordinator = Mc5000Coordinator(hass, entry)
     entry.runtime_data = coordinator
+
+    async def _async_disconnect_on_stop(_event: Event) -> None:
+        # Hang up cleanly instead of letting the link drop when HA stops;
+        # the charger's Bluetooth has locked up after abrupt disconnects.
+        await coordinator.async_shutdown()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_disconnect_on_stop)
+    )
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Connect in the background so a charger that is off doesn't block startup.
     entry.async_create_background_task(
