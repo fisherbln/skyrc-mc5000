@@ -229,3 +229,14 @@ async def test_program_settings_restored(hass: HomeAssistant, mock_charger) -> N
     assert hass.states.get("select.skyrc_mc5000_4036_slot_2_program_chemistry").state == "lifepo4"
     assert hass.states.get("select.skyrc_mc5000_4036_slot_2_program_operation").state == "storage"
     assert hass.states.get("number.skyrc_mc5000_4036_slot_2_program_charge_current").state == "1.5"
+
+
+async def test_dropped_connection_marks_unavailable(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"
+    mock_charger.is_connected = False
+    mock_charger.connect.return_value = False
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == STATE_UNAVAILABLE

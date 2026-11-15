@@ -63,6 +63,10 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
             try:
                 charger = await self._async_connected_charger()
                 await charger.update()
+                if not charger.is_connected:
+                    # The library swallows errors once the link has dropped;
+                    # don't report the previous readings as current.
+                    raise UpdateFailed(f"Lost the connection to MC5000 {self.address}")
             except HomeAssistantError as err:
                 raise UpdateFailed(str(err)) from err
             except (BleakError, TimeoutError) as err:
