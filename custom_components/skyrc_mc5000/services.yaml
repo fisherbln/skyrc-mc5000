@@ -1,0 +1,77 @@
+start_program:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: skyrc_mc5000
+    slot:
+      required: true
+      selector:
+        select:
+          options: ["1", "2", "3", "4", "all"]
+    battery_type:
+      required: true
+      selector:
+        select:
+          translation_key: battery_type
+          options:
+            [liion, liion_hv, lifepo4, nimh, nicd, eneloop, nizn, ram, lto, naion]
+    operation:
+      required: true
+      selector:
+        select:
+          translation_key: operation
+          options: [charge, storage, discharge, cycle, refresh, breakin]
+    capacity:
+      required: true
+      selector:
+        number: { min: 100, max: 20000, step: 50, unit_of_measurement: mAh, mode: box }
+    charge_current:
+      required: true
+      selector:
+        number: { min: 0.05, max: 3.0, step: 0.05, unit_of_measurement: A, mode: box }
+    discharge_current:
+      default: 0.5
+      selector:
+        number: { min: 0.05, max: 2.0, step: 0.05, unit_of_measurement: A, mode: box }
+    charge_voltage:
+      selector:
+        number: { min: 1000, max: 4350, step: 10, unit_of_measurement: mV, mode: box }
+    discharge_voltage:
+      selector:
+        number: { min: 500, max: 4000, step: 10, unit_of_measurement: mV, mode: box }
+    storage_voltage:
+      selector:
+        number: { min: 2000, max: 4000, step: 10, unit_of_measurement: mV, mode: box }
+    charge_end_current:
+      default: 100
+      selector:
+        number: { min: 10, max: 1000, step: 10, unit_of_measurement: mA, mode: box }
+    discharge_end_current:
+      default: 100
+      selector:
+        number: { min: 10, max: 1000, step: 10, unit_of_measurement: mA, mode: box }
+    rest_time:
+      default: 10
+      selector:
+        number: { min: 0, max: 240, unit_of_measurement: min, mode: box }
+    cycle_count:
+      default: 1
+      selector:
+        number: { min: 1, max: 99, mode: box }
+    delta_v:
+      default: 6
+      selector:
+        number: { min: 0, max: 20, unit_of_measurement: mV, mode: box }
+    trickle_current:
+      default: 0
+      selector:
+        number: { min: 0, max: 300, step: 10, unit_of_measurement: mA, mode: box }
+    protection_temperature:
+      default: 60
+      selector:
+        number: { min: 20, max: 71, unit_of_measurement: "°C", mode: box }
+    protection_time:
+      default: 0
+      selector:
+        number: { min: 0, max: 1440, unit_of_measurement: min, mode: box }

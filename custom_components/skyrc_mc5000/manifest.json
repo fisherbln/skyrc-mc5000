@@ -1,0 +1,16 @@
+{
+  "domain": "skyrc_mc5000",
+  "name": "SkyRC MC5000",
+  "bluetooth": [{ "local_name": "#Charger*", "connectable": true }],
+  "codeowners": ["@fisherbln"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/fisherbln/skyrc-mc5000",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/fisherbln/skyrc-mc5000/issues",
+  "requirements": [
+    "skyrc-ble @ https://github.com/fisherbln/skyrc-ble/archive/798dcadac1ac8c496dcbf3c2f143aae269edf575.zip"
+  ],
+  "version": "0.1.0"
+}

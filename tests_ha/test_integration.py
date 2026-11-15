@@ -1,0 +1,151 @@
+from unittest.mock import patch
+
+import pytest
+from homeassistant.config_entries import SOURCE_BLUETOOTH, SOURCE_USER
+from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.service_info.bluetooth import BluetoothServiceInfo
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from skyrc_ble import Mc5000BatteryType, Mc5000Operation
+
+from custom_components.skyrc_mc5000.const import DOMAIN
+
+from .conftest import ADDRESS
+
+SERVICE_INFO = BluetoothServiceInfo(
+    name="#Charger-4036",
+    address=ADDRESS,
+    rssi=-47,
+    manufacturer_data={},
+    service_data={},
+    service_uuids=["0000ffe0-0000-1000-8000-00805f9b34fb"],
+    source="local",
+)
+
+
+async def _setup(hass: HomeAssistant) -> MockConfigEntry:
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id=ADDRESS, data={"address": ADDRESS},
+        title="SkyRC MC5000 4036",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry
+
+
+async def test_user_flow(hass: HomeAssistant) -> None:
+    with patch(
+        "custom_components.skyrc_mc5000.config_flow.async_discovered_service_info",
+        return_value=[SERVICE_INFO],
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        assert result["type"] is FlowResultType.FORM
+        with patch("custom_components.skyrc_mc5000.async_setup_entry", return_value=True):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {"address": ADDRESS}
+            )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "SkyRC MC5000 4036"
+    assert result["data"] == {"address": ADDRESS}
+
+
+async def test_bluetooth_discovery_flow(hass: HomeAssistant) -> None:
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_BLUETOOTH}, data=SERVICE_INFO
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "bluetooth_confirm"
+    with patch("custom_components.skyrc_mc5000.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_no_devices(hass: HomeAssistant) -> None:
+    with patch(
+        "custom_components.skyrc_mc5000.config_flow.async_discovered_service_info",
+        return_value=[],
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"
+
+
+async def test_sensors(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_status").state == "standby"
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_chemistry").state == "nimh"
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_3_voltage").state == "3.518"
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_3_chemistry").state == "liion"
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_internal_resistance").state == "unknown"
+
+
+async def test_stop_buttons(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.skyrc_mc5000_4036_stop_slot_2"}, blocking=True
+    )
+    mock_charger.stop_charge_multi.assert_awaited_with(0x02)
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.skyrc_mc5000_4036_stop_all_slots"}, blocking=True
+    )
+    mock_charger.stop_charge_multi.assert_awaited_with(0)
+
+
+async def test_start_program_defaults(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN, "start_program",
+        {"slot": "3", "battery_type": "liion", "operation": "charge",
+         "capacity": 5000, "charge_current": 1.0},
+        blocking=True,
+    )
+    channels, program = mock_charger.start_program_multi.await_args.args
+    assert channels == 0x04
+    assert program.battery_type is Mc5000BatteryType.LIION
+    assert program.operation is Mc5000Operation.CHARGE
+    assert program.charge_voltage == 4200
+    assert program.discharge_voltage == 3200
+    assert program.charge_current == 1.0
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"battery_type": "liion", "operation": "charge", "charge_voltage": 4300},
+        {"battery_type": "nimh", "operation": "storage"},
+    ],
+)
+async def test_start_program_rejects_unsafe(hass: HomeAssistant, mock_charger, extra) -> None:
+    await _setup(hass)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "start_program",
+            {"slot": "1", "capacity": 2000, "charge_current": 0.5, **extra},
+            blocking=True,
+        )
+    mock_charger.start_program_multi.assert_not_awaited()
+
+
+async def test_connection_switch_releases_charger(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.skyrc_mc5000_4036_connection"}, blocking=True
+    )
+    mock_charger.disconnect.assert_awaited()
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == STATE_UNAVAILABLE
+    assert hass.states.get("switch.skyrc_mc5000_4036_connection").state == "off"
+    # Buttons are unavailable while released, so presses never reach the charger.
+    assert hass.states.get("button.skyrc_mc5000_4036_stop_slot_1").state == STATE_UNAVAILABLE
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.skyrc_mc5000_4036_stop_slot_1"}, blocking=True
+    )
+    mock_charger.stop_charge_multi.assert_not_awaited()
+    await hass.services.async_call(
+        "switch", "turn_on", {"entity_id": "switch.skyrc_mc5000_4036_connection"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"

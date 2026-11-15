@@ -1,0 +1,216 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "description": "Choose the MC5000 to add. Close the SkyRC app first.",
+        "data": {
+          "address": "Charger"
+        }
+      },
+      "bluetooth_confirm": {
+        "description": "Set up {name}? Close the SkyRC app first; the charger accepts one connection at a time."
+      }
+    },
+    "abort": {
+      "already_configured": "This charger is already set up.",
+      "no_devices_found": "No MC5000 found. Make sure it is powered, in range of a Bluetooth adapter or proxy, and not connected to the SkyRC app."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Slot {slot} status",
+        "state": {
+          "standby": "Standby",
+          "ready": "Ready",
+          "charging": "Charging",
+          "discharging": "Discharging",
+          "resting": "Resting",
+          "done": "Done"
+        }
+      },
+      "voltage": {
+        "name": "Slot {slot} voltage"
+      },
+      "current": {
+        "name": "Slot {slot} current"
+      },
+      "capacity": {
+        "name": "Slot {slot} capacity"
+      },
+      "elapsed": {
+        "name": "Slot {slot} elapsed time"
+      },
+      "resistance": {
+        "name": "Slot {slot} internal resistance"
+      },
+      "operation": {
+        "name": "Slot {slot} operation",
+        "state": {
+          "charge": "Charge",
+          "storage": "Storage",
+          "discharge": "Discharge",
+          "cycle": "Cycle",
+          "refresh": "Refresh",
+          "breakin": "Break-in"
+        }
+      },
+      "chemistry": {
+        "name": "Slot {slot} chemistry",
+        "state": {
+          "liion": "Li-ion",
+          "liion_hv": "Li-ion HV (4.35 V)",
+          "lifepo4": "LiFePO4",
+          "nimh": "NiMH",
+          "nicd": "NiCd",
+          "eneloop": "Eneloop",
+          "nizn": "NiZn",
+          "ram": "RAM",
+          "lto": "LTO",
+          "naion": "Na-ion"
+        }
+      },
+      "error": {
+        "name": "Slot {slot} error",
+        "state": {
+          "none": "None",
+          "input_voltage_low": "Input voltage low",
+          "input_voltage_high": "Input voltage high",
+          "connection_break": "Connection break",
+          "capacity_limit": "Capacity limit reached",
+          "time_limit": "Time limit reached",
+          "internal_temp_high": "Internal temperature high",
+          "calibration_failed": "Calibration failed",
+          "high_resistance": "High internal resistance",
+          "battery_type_error": "Battery type error",
+          "overload": "Overload",
+          "reverse_polarity": "Reverse polarity",
+          "fully_charged": "Fully charged"
+        }
+      },
+      "temperature": {
+        "name": "Slot {slot} temperature"
+      }
+    },
+    "button": {
+      "stop_slot": {
+        "name": "Stop slot {slot}"
+      },
+      "stop_all": {
+        "name": "Stop all slots"
+      }
+    },
+    "switch": {
+      "connection": {
+        "name": "Connection"
+      }
+    }
+  },
+  "selector": {
+    "battery_type": {
+      "options": {
+        "liion": "Li-ion",
+        "liion_hv": "Li-ion HV (4.35 V)",
+        "lifepo4": "LiFePO4",
+        "nimh": "NiMH",
+        "nicd": "NiCd",
+        "eneloop": "Eneloop",
+        "nizn": "NiZn",
+        "ram": "RAM",
+        "lto": "LTO",
+        "naion": "Na-ion"
+      }
+    },
+    "operation": {
+      "options": {
+        "charge": "Charge",
+        "storage": "Storage",
+        "discharge": "Discharge",
+        "cycle": "Cycle",
+        "refresh": "Refresh",
+        "breakin": "Break-in"
+      }
+    }
+  },
+  "services": {
+    "start_program": {
+      "name": "Start program",
+      "description": "Send a complete program to a slot and start it right away.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Charger",
+          "description": "Only needed when more than one MC5000 is set up."
+        },
+        "slot": {
+          "name": "Slot",
+          "description": "Slot 1-4, or all four."
+        },
+        "battery_type": {
+          "name": "Chemistry",
+          "description": "Battery chemistry. Check it before starting."
+        },
+        "operation": {
+          "name": "Operation",
+          "description": "Charge, storage, discharge and cycle for lithium; charge, refresh, break-in, discharge and cycle for nickel."
+        },
+        "capacity": {
+          "name": "Capacity",
+          "description": "Battery capacity."
+        },
+        "charge_current": {
+          "name": "Charge current",
+          "description": ""
+        },
+        "discharge_current": {
+          "name": "Discharge current",
+          "description": ""
+        },
+        "charge_voltage": {
+          "name": "Charge voltage",
+          "description": "Defaults to the chemistry's maximum (e.g. 4200 mV for Li-ion); higher values are refused."
+        },
+        "discharge_voltage": {
+          "name": "Discharge cutoff voltage",
+          "description": "Defaults per chemistry (e.g. 3200 mV Li-ion, 900 mV NiMH)."
+        },
+        "storage_voltage": {
+          "name": "Storage voltage",
+          "description": "For the storage operation. Defaults per chemistry."
+        },
+        "charge_end_current": {
+          "name": "Charge termination current",
+          "description": ""
+        },
+        "discharge_end_current": {
+          "name": "Discharge termination current",
+          "description": ""
+        },
+        "rest_time": {
+          "name": "Rest time",
+          "description": "Rest between charge and discharge steps."
+        },
+        "cycle_count": {
+          "name": "Cycles",
+          "description": ""
+        },
+        "delta_v": {
+          "name": "-dV",
+          "description": "NiMH/NiCd peak detection."
+        },
+        "trickle_current": {
+          "name": "Trickle current",
+          "description": "0 = off; 10 mA steps."
+        },
+        "protection_temperature": {
+          "name": "Cutoff temperature",
+          "description": ""
+        },
+        "protection_time": {
+          "name": "Safety timer",
+          "description": "0 = charger default."
+        }
+      }
+    }
+  }
+}
