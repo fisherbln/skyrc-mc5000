@@ -249,3 +249,19 @@ async def test_disconnects_when_home_assistant_stops(hass: HomeAssistant, mock_c
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
     await hass.async_block_till_done()
     mock_charger.disconnect.assert_awaited()
+
+
+async def test_keeps_polling_while_connected_and_not_advertising(
+    hass: HomeAssistant, mock_charger
+) -> None:
+    """Connected chargers stop advertising; that must not fail the poll."""
+    await _setup(hass)
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    with patch(
+        "custom_components.skyrc_mc5000.coordinator.bluetooth.async_ble_device_from_address",
+        return_value=None,
+    ):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+    assert coordinator.last_update_success
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"

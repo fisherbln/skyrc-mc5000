@@ -40,6 +40,10 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
 
     async def _async_connected_charger(self) -> Mc5000:
         """Return a connected charger, connecting through HA Bluetooth if needed."""
+        if self.charger is not None and self.charger.is_connected:
+            # A connected charger stops advertising, so HA's Bluetooth manager
+            # forgets it after a few minutes; only look it up to reconnect.
+            return self.charger
         ble_device = bluetooth.async_ble_device_from_address(
             self.hass, self.address, connectable=True
         )
