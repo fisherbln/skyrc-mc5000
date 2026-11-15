@@ -99,11 +99,53 @@
       },
       "stop_all": {
         "name": "Stop all slots"
+      },
+      "start_slot": {
+        "name": "Start slot {slot}"
       }
     },
     "switch": {
       "connection": {
         "name": "Connection"
+      }
+    },
+    "select": {
+      "program_chemistry": {
+        "name": "Slot {slot} program chemistry",
+        "state": {
+          "liion": "Li-ion",
+          "liion_hv": "Li-ion HV (4.35 V)",
+          "lifepo4": "LiFePO4",
+          "nimh": "NiMH",
+          "nicd": "NiCd",
+          "eneloop": "Eneloop",
+          "nizn": "NiZn",
+          "ram": "RAM",
+          "lto": "LTO",
+          "naion": "Na-ion"
+        }
+      },
+      "program_operation": {
+        "name": "Slot {slot} program operation",
+        "state": {
+          "charge": "Charge",
+          "storage": "Storage",
+          "discharge": "Discharge",
+          "cycle": "Cycle",
+          "refresh": "Refresh",
+          "breakin": "Break-in"
+        }
+      }
+    },
+    "number": {
+      "program_charge_current": {
+        "name": "Slot {slot} program charge current"
+      },
+      "program_discharge_current": {
+        "name": "Slot {slot} program discharge current"
+      },
+      "program_capacity": {
+        "name": "Slot {slot} program capacity"
       }
     }
   },

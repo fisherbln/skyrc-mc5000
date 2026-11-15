@@ -13,7 +13,8 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from skyrc_ble import Mc5000, Mc5000Program, Mc5000State
 
-from .const import CONF_ADDRESS, DOMAIN, UPDATE_INTERVAL_SECONDS
+from .const import CONF_ADDRESS, DOMAIN, SLOTS, UPDATE_INTERVAL_SECONDS
+from .program import SlotProgram
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         self.charger: Mc5000 | None = None
         self.paused = False
         self._lock = asyncio.Lock()
+        self.programs: dict[int, SlotProgram] = {slot: SlotProgram() for slot in SLOTS}
 
     async def _async_connected_charger(self) -> Mc5000:
         """Return a connected charger, connecting through HA Bluetooth if needed."""
@@ -70,6 +72,17 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
     async def async_start_program(self, channels: int, program: Mc5000Program) -> None:
         """Send a program to the channels in the bitmask and start it."""
         await self._async_command(lambda c: c.start_program_multi(channels, program))
+
+    async def async_start_slot(self, slot: int) -> None:
+        """Start the program set up for one slot with the select/number entities."""
+        program = self.programs[slot].build()
+        try:
+            from skyrc_ble.mc5000 import build_program_payload
+
+            build_program_payload(0, program)
+        except ValueError as err:
+            raise HomeAssistantError(f"Invalid program for slot {slot}: {err}") from err
+        await self.async_start_program(1 << (slot - 1), program)
 
     async def async_stop(self, channels: int) -> None:
         """Stop the channels in the bitmask (0 = all)."""

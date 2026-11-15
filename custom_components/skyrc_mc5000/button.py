@@ -18,6 +18,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     entities: list[ButtonEntity] = [Mc5000StopButton(coordinator, slot) for slot in SLOTS]
     entities.append(Mc5000StopButton(coordinator, None))
+    entities.extend(Mc5000StartButton(coordinator, slot) for slot in SLOTS)
     async_add_entities(entities)
 
 
@@ -33,3 +34,17 @@ class Mc5000StopButton(Mc5000Entity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_stop(self._mask)
+
+
+class Mc5000StartButton(Mc5000Entity, ButtonEntity):
+    """Send the slot's program settings to the charger and start it."""
+
+    _attr_translation_key = "start_slot"
+
+    def __init__(self, coordinator, slot: int) -> None:
+        super().__init__(coordinator, f"slot{slot}_start")
+        self._slot = slot
+        self._attr_translation_placeholders = {"slot": str(slot)}
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_start_slot(self._slot)

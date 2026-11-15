@@ -60,7 +60,10 @@ temperature and time limits).
 
 Per slot you get status, voltage, current, capacity, elapsed time, internal resistance,
 operation, chemistry and error sensors, plus **Stop slot N** and **Stop all slots**
-buttons. The **Connection** switch releases the Bluetooth link so the SkyRC app can
+buttons. Each slot also has program settings (chemistry and operation pickers, charge and
+discharge current, capacity) and a **Start slot N** button that sends them. The settings
+live in Home Assistant, survive restarts, and default the voltages to the chemistry's
+safe values. The **Connection** switch releases the Bluetooth link so the SkyRC app can
 connect. Turn it back on to resume.
 
 Start a program with the `skyrc_mc5000.start_program` action:

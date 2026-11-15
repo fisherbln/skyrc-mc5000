@@ -151,3 +151,81 @@ async def test_connection_switch_releases_charger(hass: HomeAssistant, mock_char
     )
     await hass.async_block_till_done()
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"
+
+
+async def test_program_entities_and_start(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    chem = "select.skyrc_mc5000_4036_slot_3_program_chemistry"
+    op = "select.skyrc_mc5000_4036_slot_3_program_operation"
+    current = "number.skyrc_mc5000_4036_slot_3_program_charge_current"
+    capacity = "number.skyrc_mc5000_4036_slot_3_program_capacity"
+
+    assert hass.states.get(chem).state == "nimh"
+    assert "refresh" in hass.states.get(op).attributes["options"]
+
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": op, "option": "breakin"}, blocking=True
+    )
+    # Switching to Li-ion drops break-in (not a lithium operation) back to charge.
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": chem, "option": "liion"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(op).state == "charge"
+    assert hass.states.get(op).attributes["options"] == [
+        "charge", "storage", "discharge", "cycle"
+    ]
+
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": current, "value": 1.0}, blocking=True
+    )
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": capacity, "value": 5000}, blocking=True
+    )
+    await hass.services.async_call(
+        "button", "press", {"entity_id": "button.skyrc_mc5000_4036_start_slot_3"}, blocking=True
+    )
+    channels, program = mock_charger.start_program_multi.await_args.args
+    assert channels == 0x04
+    assert program.battery_type is Mc5000BatteryType.LIION
+    assert program.operation is Mc5000Operation.CHARGE
+    assert program.charge_current == 1.0
+    assert program.capacity == 5000
+    assert program.charge_voltage == 4200
+
+
+async def test_program_settings_editable_while_released(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        "switch", "turn_off", {"entity_id": "switch.skyrc_mc5000_4036_connection"}, blocking=True
+    )
+    chem = "select.skyrc_mc5000_4036_slot_1_program_chemistry"
+    assert hass.states.get(chem).state == "nimh"
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": chem, "option": "eneloop"}, blocking=True
+    )
+    assert hass.states.get(chem).state == "eneloop"
+    assert hass.states.get("button.skyrc_mc5000_4036_start_slot_1").state == STATE_UNAVAILABLE
+
+
+async def test_program_settings_restored(hass: HomeAssistant, mock_charger) -> None:
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import (
+        mock_restore_cache_with_extra_data,
+    )
+
+    mock_restore_cache_with_extra_data(
+        hass,
+        [
+            (State("select.skyrc_mc5000_4036_slot_2_program_chemistry", "lifepo4"), {}),
+            (State("select.skyrc_mc5000_4036_slot_2_program_operation", "storage"), {}),
+            (
+                State("number.skyrc_mc5000_4036_slot_2_program_charge_current", "1.5"),
+                {"native_value": 1.5, "native_unit_of_measurement": "A", "native_min_value": 0.05, "native_max_value": 3.0, "native_step": 0.05},
+            ),
+        ],
+    )
+    await _setup(hass)
+    assert hass.states.get("select.skyrc_mc5000_4036_slot_2_program_chemistry").state == "lifepo4"
+    assert hass.states.get("select.skyrc_mc5000_4036_slot_2_program_operation").state == "storage"
+    assert hass.states.get("number.skyrc_mc5000_4036_slot_2_program_charge_current").state == "1.5"

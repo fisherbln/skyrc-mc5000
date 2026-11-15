@@ -12,5 +12,5 @@
   "requirements": [
     "skyrc-ble @ https://github.com/fisherbln/skyrc-ble/archive/798dcadac1ac8c496dcbf3c2f143aae269edf575.zip"
   ],
-  "version": "0.1.1"
+  "version": "0.2.0"
 }

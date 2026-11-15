@@ -13,27 +13,21 @@ from skyrc_ble.models import MC5000_MAX_CHARGE_VOLTAGE
 
 from .const import DOMAIN
 from .coordinator import Mc5000Coordinator
+from .program import DEFAULT_DISCHARGE_VOLTAGE
 
-PLATFORMS = [Platform.BUTTON, Platform.SENSOR, Platform.SWITCH]
+PLATFORMS = [
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 type Mc5000ConfigEntry = ConfigEntry[Mc5000Coordinator]
 
 SERVICE_START_PROGRAM = "start_program"
 
-# App default discharge cutoff per chemistry, in mV.
-DEFAULT_DISCHARGE_VOLTAGE = {
-    Mc5000BatteryType.LIION: 3200,
-    Mc5000BatteryType.LIION_HV: 3400,
-    Mc5000BatteryType.LIFEPO4: 2900,
-    Mc5000BatteryType.NIMH: 900,
-    Mc5000BatteryType.NICD: 900,
-    Mc5000BatteryType.ENELOOP: 900,
-    Mc5000BatteryType.NIZN: 1100,
-    Mc5000BatteryType.RAM: 900,
-    Mc5000BatteryType.LTO: 1800,
-    Mc5000BatteryType.NAION: 2000,
-}
 
 _current = vol.All(vol.Coerce(float), vol.Range(min=0, max=3.0))
 _mv = vol.All(vol.Coerce(int), vol.Range(min=500, max=4400))
