@@ -57,7 +57,8 @@ Bitmask: slot 1 = `0x01`, slot 2 = `0x02`, slot 3 = `0x04`, slot 4 = `0x08`.
 | `0x95` | write system settings | 17 bytes (below) | byte 4 == 1 = success |
 | `0x9B` | USB-C PD port status | `[0x00]` | USB-C frame (below) |
 | `0x57` | device info | 17 bytes: `00` + MAC byte-reversed + zeros | info frame (below) |
-| `0x93` | query slot program (unverified) | `[mask]` | program frame |
+| `0x93` | query slot program: **not supported** (no reply, idle or running) | `[mask]` | – |
+| `0x98` | stored voltage curve of a running slot | `[mask]` | 1+ pages (below) |
 
 Examples: status slot 1 `0f 03 91 01 92`; stop all `0f 03 fe 00 fe`;
 stop slot 3 `0f 03 fe 04 02`.
@@ -150,3 +151,18 @@ only output has been observed.
 **Device info (`0x57`)**: reply `0f 13 57 00 31 30 30 32 31 34 04 00 00 00 00 02 02 02 00 ce 57`:
 bytes 4–9 ASCII model code `100214`, bytes 15–16 firmware `2.02`, hardware revision from
 the hex of bytes 4–19 (character 27) = `2`.
+
+
+## Stored voltage curve (`0x98`, hardware-verified 2026-11-22)
+
+`0f LEN 98 <mask> <pages> <page> <interval> <v0 lo> <v0 hi> <v1 lo> <v1 hi> … SUM`
+
+One request streams every page back to back (page 1..pages), each up to 100 samples.
+Samples are millivolts, little-endian; `interval` is seconds per sample (1 for a run
+under 4 minutes; whether it grows on long runs is not yet known). Example, 228 s into
+an Eneloop charge at 0.5 A: pages 3 (100 + 100 + 26 samples), starting at 1.409 V and
+dipping to 1.343 V before rising.
+
+The charger only answers for a slot that is running: no reply for an empty or idle
+slot, and none once the run was stopped. `0x93` (the NC-series "read program")
+got no reply on the MC5000 at all.
