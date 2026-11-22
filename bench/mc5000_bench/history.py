@@ -89,6 +89,7 @@ class Run:
     outcome: str = "Running"
     capacity: float | None = None
     elapsed_s: float | None = None
+    discharged: float | None = None  # mAh out during discharge phases (cycles)
     curve: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 
     @property
@@ -139,6 +140,12 @@ def find_runs(slot: int, charger: ChargerEntities, history: dict[str, Points],
         run.chemistry = _value_at(pts("chemistry"), end)
         run.operation = _value_at(pts("operation"), end)
         run.capacity = _last_nonzero(pts("capacity"), run.start, end)
+        # Capacity reached during discharge phases: the measured capacity of a cycle.
+        out = None
+        for t, v in numeric(pts("capacity"), run.start, end):
+            if v and _value_at(status, t) == "discharging":
+                out = v
+        run.discharged = out
         elapsed = _last_nonzero(pts("elapsed"), run.start, end)
         if elapsed is not None:
             run.elapsed_s = elapsed * elapsed_unit_s
@@ -182,7 +189,8 @@ class Archive:
         except (OSError, ValueError):
             return None
         raw["curve"] = {k: [tuple(p) for p in v] for k, v in raw.get("curve", {}).items()}
-        return Run(**raw)
+        known = set(Run.__dataclass_fields__)
+        return Run(**{k: v for k, v in raw.items() if k in known})
 
     def all(self) -> list[Run]:
         if not self.root.exists():

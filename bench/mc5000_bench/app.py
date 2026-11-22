@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
@@ -356,15 +357,73 @@ class PresetDialog(QDialog):
         form.addRow("Capacity", self.capacity)
         form.addRow("Storage voltage", self.storage)
         form.addRow("Discharge cutoff", cutoff_row)
+        self.cycle_mode = QComboBox()
+        for key, label in chem.CYCLE_MODES.items():
+            self.cycle_mode.addItem(label, key)
         form.addRow("Cycles", self.cycles)
+        form.addRow("Cycle order", self.cycle_mode)
         form.addRow("Note", self.note)
         self.form = form
-        right.addLayout(form)
+
+        # Advanced settings: hidden until asked for.
+        self.show_adv = QCheckBox("Show advanced settings")
+        self.adv_box = QWidget()
+        adv = QFormLayout(self.adv_box)
+        adv.setContentsMargins(0, 0, 0, 0)
+
+        def spin(lo: float, hi: float, step: float, suffix: str, decimals: int = 0):
+            box = QDoubleSpinBox() if decimals else QSpinBox()
+            if decimals:
+                box.setDecimals(decimals)
+            box.setRange(lo, hi)
+            box.setSingleStep(step)
+            box.setSuffix(suffix)
+            return box
+
+        self.charge_v_default = QCheckBox("Full charge")
+        self.charge_v = spin(1.0, 4.35, 0.01, " V", 2)
+        charge_v_row = QHBoxLayout()
+        charge_v_row.addWidget(self.charge_v)
+        charge_v_row.addWidget(self.charge_v_default)
+        self.charge_end = spin(10, 1000, 10, " mA")
+        self.discharge_end = spin(10, 1000, 10, " mA")
+        self.rest = spin(0, 240, 1, " min")
+        self.delta_v = spin(0, 20, 1, " mV")
+        self.trickle = spin(0, 300, 10, " mA")
+        self.max_temp = spin(20, 71, 1, " °C")
+        self.time_limit = spin(0, 1440, 10, " min")
+        self.time_limit.setSpecialValueText("Charger default")
+        self.restart = spin(0, 4.3, 0.01, " V", 2)
+        self.restart.setSpecialValueText("Off")
+        adv.addRow("Charge voltage", charge_v_row)
+        adv.addRow("Charge end current", self.charge_end)
+        adv.addRow("Discharge end current", self.discharge_end)
+        adv.addRow("Rest between phases", self.rest)
+        adv.addRow("−ΔV (full detection)", self.delta_v)
+        adv.addRow("Trickle after charge", self.trickle)
+        adv.addRow("Temperature limit", self.max_temp)
+        adv.addRow("Time limit", self.time_limit)
+        adv.addRow("Restart below", self.restart)
+        self.adv = adv
+        self.adv_box.hide()
+        self.show_adv.toggled.connect(self.adv_box.setVisible)
+
+        form_box = QWidget()
+        form_layout = QVBoxLayout(form_box)
+        form_layout.setContentsMargins(0, 0, 12, 0)
+        form_layout.addLayout(form)
+        form_layout.addWidget(self.show_adv)
+        form_layout.addWidget(self.adv_box)
+        form_layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(form_box)
+        right.addWidget(scroll, 1)
         self.problems = QLabel("")
         self.problems.setObjectName("error")
         self.problems.setWordWrap(True)
         right.addWidget(self.problems)
-        right.addStretch()
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -382,6 +441,11 @@ class PresetDialog(QDialog):
         self.cutoff_default.toggled.connect(self._edited)
         self.battery.currentIndexChanged.connect(self._battery_changed)
         self.operation.currentIndexChanged.connect(self._edited)
+        self.cycle_mode.currentIndexChanged.connect(self._edited)
+        for widget in (self.charge_v, self.charge_end, self.discharge_end, self.rest,
+                       self.delta_v, self.trickle, self.max_temp, self.time_limit, self.restart):
+            widget.valueChanged.connect(self._edited)
+        self.charge_v_default.toggled.connect(self._edited)
 
         self._fill_list()
         if self.items:
@@ -429,7 +493,21 @@ class PresetDialog(QDialog):
             (preset.discharge_voltage or chem.DISCHARGE_MV[preset.battery_type]) / 1000
         )
         self.cycles.setValue(preset.cycle_count)
+        self.cycle_mode.setCurrentIndex(max(0, self.cycle_mode.findData(preset.cycle_mode)))
         self.note.setText(preset.note)
+        top = chem.MAX_CHARGE_MV[preset.battery_type]
+        self.charge_v.setMaximum(top / 1000)
+        self.charge_v_default.setChecked(preset.charge_voltage is None)
+        self.charge_v.setValue((preset.charge_voltage or top) / 1000)
+        self.charge_end.setValue(preset.charge_end_current)
+        self.discharge_end.setValue(preset.discharge_end_current)
+        self.rest.setValue(preset.rest_time)
+        self.delta_v.setValue(preset.delta_v)
+        self.trickle.setValue(preset.trickle_current)
+        self.max_temp.setValue(preset.protection_temperature)
+        self.time_limit.setValue(preset.protection_time)
+        self.restart.setMaximum((top - 10) / 1000)
+        self.restart.setValue(preset.restart_voltage / 1000)
         self._loading = False
         self._update_visibility()
         self._show_problems()
@@ -450,6 +528,12 @@ class PresetDialog(QDialog):
         self._fill_operations(battery, self.operation.currentData())
         self.storage.setValue(chem.STORAGE_MV.get(battery, 3800) / 1000)
         self.cutoff.setValue(chem.DISCHARGE_MV[battery] / 1000)
+        top = chem.MAX_CHARGE_MV[battery]
+        self.charge_v.setMaximum(top / 1000)
+        self.charge_v_default.setChecked(True)
+        self.charge_v.setValue(top / 1000)
+        self.restart.setMaximum((top - 10) / 1000)
+        self.restart.setValue(0)
         self._edited()
 
     def _update_visibility(self) -> None:
@@ -460,9 +544,25 @@ class PresetDialog(QDialog):
             self.storage: op == "storage",
             self.cycles: op == "cycle",
         }
+        rows[self.cycle_mode] = op == "cycle"
         for widget, visible in rows.items():
             self.form.setRowVisible(widget, visible)
         self.cutoff.setEnabled(not self.cutoff_default.isChecked())
+        battery = self.battery.currentData() or "nimh"
+        nickel = battery in chem.NICKEL
+        adv_rows = {
+            self.charge_end: chem.uses_charge(op),
+            self.discharge_end: chem.uses_discharge(op),
+            self.rest: op in ("cycle", "refresh", "breakin", "storage"),
+            self.delta_v: nickel and chem.uses_charge(op),
+            self.trickle: nickel and chem.uses_charge(op),
+            self.time_limit: True,
+            self.max_temp: True,
+            self.restart: battery in chem.LITHIUM and op == "charge",
+        }
+        for widget, visible in adv_rows.items():
+            self.adv.setRowVisible(widget, visible)
+        self.charge_v.setEnabled(not self.charge_v_default.isChecked())
 
     def _edited(self, *_: Any) -> None:
         if self._loading:
@@ -483,7 +583,22 @@ class PresetDialog(QDialog):
             None if self.cutoff_default.isChecked() else round(self.cutoff.value() * 1000)
         )
         preset.cycle_count = self.cycles.value() if preset.operation == "cycle" else 1
+        preset.cycle_mode = self.cycle_mode.currentData() or "charge_discharge"
         preset.note = self.note.text()
+        preset.charge_voltage = (
+            None if self.charge_v_default.isChecked() else round(self.charge_v.value() * 1000)
+        )
+        preset.charge_end_current = self.charge_end.value()
+        preset.discharge_end_current = self.discharge_end.value()
+        preset.rest_time = self.rest.value()
+        preset.delta_v = self.delta_v.value()
+        preset.trickle_current = self.trickle.value()
+        preset.protection_temperature = self.max_temp.value()
+        preset.protection_time = self.time_limit.value()
+        preset.restart_voltage = (
+            round(self.restart.value() * 1000)
+            if preset.battery_type in chem.LITHIUM and preset.operation == "charge" else 0
+        )
         item = self.list.currentItem()
         if item:
             item.setText(preset.name)

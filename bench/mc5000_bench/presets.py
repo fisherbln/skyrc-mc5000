@@ -22,6 +22,17 @@ class Preset:
     discharge_voltage: int | None = None
     cycle_count: int = 1
     note: str = ""
+    # Advanced settings (charger defaults unless changed).
+    charge_voltage: int | None = None  # mV; None = the chemistry's full charge
+    cycle_mode: str = "charge_discharge"
+    charge_end_current: int = 100  # mA
+    discharge_end_current: int = 100  # mA
+    rest_time: int = 10  # minutes between phases
+    delta_v: int = 6  # mV, nickel full-charge detection
+    trickle_current: int = 0  # mA, nickel only
+    protection_temperature: int = 60  # °C
+    protection_time: int = 0  # minutes, 0 = charger default
+    restart_voltage: int = 0  # mV, lithium recharge threshold, 0 = off
 
     def problems(self) -> list[str]:
         """Reasons the preset can't be sent; empty when it is fine."""
@@ -61,6 +72,27 @@ class Preset:
             out.append("Discharge cutoff is out of range for this battery type.")
         if not 1 <= self.cycle_count <= 99:
             out.append("Cycles must be 1–99.")
+        top = chem.MAX_CHARGE_MV[self.battery_type]
+        if self.charge_voltage is not None and not 1000 <= self.charge_voltage <= top:
+            out.append(f"Charge voltage can't be above {top / 1000:.2f} V for this battery.")
+        if self.cycle_mode not in chem.CYCLE_MODES:
+            out.append("Unknown cycle order.")
+        for label, value in (("Charge end current", self.charge_end_current),
+                             ("Discharge end current", self.discharge_end_current)):
+            if not 10 <= value <= 1000:
+                out.append(f"{label} must be 10–1000 mA.")
+        if not 0 <= self.rest_time <= 240:
+            out.append("Rest time must be 0–240 min.")
+        if not 0 <= self.delta_v <= 20:
+            out.append("ΔV must be 0–20 mV.")
+        if not 0 <= self.trickle_current <= 300 or self.trickle_current % 10:
+            out.append("Trickle current must be 0–300 mA in 10 mA steps.")
+        if not 20 <= self.protection_temperature <= 71:
+            out.append("Temperature limit must be 20–71 °C.")
+        if not 0 <= self.protection_time <= 1440:
+            out.append("Time limit must be 0–1440 min.")
+        if self.restart_voltage and not 1000 <= self.restart_voltage < top:
+            out.append("Restart voltage must be below the full-charge voltage.")
         return out
 
     def summary(self) -> str:
@@ -73,8 +105,10 @@ class Preset:
             mv = self.storage_voltage or chem.STORAGE_MV.get(self.battery_type)
             if mv:
                 parts.append(f"to {mv / 1000:.2f} V")
-        if self.operation == "cycle" and self.cycle_count > 1:
-            parts.append(f"×{self.cycle_count}")
+        if self.charge_voltage and self.charge_voltage != chem.MAX_CHARGE_MV[self.battery_type]:
+            parts.append(f"to {self.charge_voltage / 1000:.2f} V")
+        if self.operation == "cycle":
+            parts.append(f"{chem.CYCLE_SHORT.get(self.cycle_mode, '?')} ×{self.cycle_count}")
         parts.append(f"{self.capacity} mAh")
         return " · ".join(parts)
 
@@ -95,6 +129,22 @@ class Preset:
             )
         if self.discharge_voltage is not None:
             data["discharge_voltage"] = int(self.discharge_voltage)
+        if self.charge_voltage is not None:
+            data["charge_voltage"] = int(self.charge_voltage)
+        data.update({
+            "charge_end_current": int(self.charge_end_current),
+            "discharge_end_current": int(self.discharge_end_current),
+            "rest_time": int(self.rest_time),
+            "delta_v": int(self.delta_v),
+            "trickle_current": int(self.trickle_current),
+            "protection_temperature": int(self.protection_temperature),
+            "protection_time": int(self.protection_time),
+        })
+        # Only sent when changed, so integration versions before 0.2.4 still work.
+        if self.operation == "cycle" and self.cycle_mode != "charge_discharge":
+            data["cycle_mode"] = self.cycle_mode
+        if self.restart_voltage:
+            data["restart_voltage"] = int(self.restart_voltage)
         if config_entry_id:
             data["config_entry_id"] = config_entry_id
         return data
@@ -113,9 +163,10 @@ DEFAULT_PRESETS: list[Preset] = [
     Preset("Li-ion storage", "liion", "storage", 5000, charge_current=1.0,
            discharge_current=1.0, storage_voltage=3800),
     Preset("NiMH capacity test", "nimh", "cycle", 2000, charge_current=0.5,
-           discharge_current=0.5, note="Charges, then discharges: ends empty"),
+           discharge_current=0.5, cycle_count=2, cycle_mode="discharge_charge",
+           note="Discharge, charge, measure, charge: ends charged"),
     Preset("Li-ion capacity test", "liion", "cycle", 5000, charge_current=1.0,
-           discharge_current=1.0, note="Charges, then discharges: ends empty"),
+           discharge_current=1.0, note="Charges, then discharges: ends empty (run Li-ion storage after)"),
     Preset("Discharge test (EBL 1.5 V AA)", "nimh", "discharge", 3000,
            discharge_current=0.5, discharge_voltage=1000,
            note="Discharge only: these cells charge over USB"),

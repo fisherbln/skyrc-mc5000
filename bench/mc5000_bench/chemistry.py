@@ -113,3 +113,13 @@ def label(chemistry: str | None) -> str:
 
 def operation_label(operation: str | None) -> str:
     return OPERATION_LABELS.get(operation or "", operation or "?")
+
+
+NICKEL = {"nimh", "nicd", "eneloop"}
+LITHIUM = {"liion", "liion_hv", "lifepo4", "lto", "naion"}
+
+CYCLE_MODES: dict[str, str] = {
+    "charge_discharge": "Charge, then discharge (ends empty)",
+    "discharge_charge": "Discharge, then charge (ends charged)",
+}
+CYCLE_SHORT = {"charge_discharge": "C→D", "discharge_charge": "D→C"}

@@ -1,7 +1,8 @@
 # MC5000 Bench
 
 A touch-friendly Linux desktop app for a SkyRC MC5000 that's set up in Home
-Assistant with the `skyrc_mc5000` integration from this repository.
+Assistant with the `skyrc_mc5000` integration from this repository (0.2.4 or
+later for cycle order and restart voltage).
 
 Home Assistant keeps its Bluetooth connection to the charger. This app never talks
 Bluetooth: it reads the charger's entities and sends commands through Home
@@ -15,9 +16,13 @@ Assistant's WebSocket API, so you can use it alongside the dashboard.
 - A preset picker on every slot: pick "Eneloop charge" or "Li-ion storage", press
   Start, confirm.
 - Presets you can add, copy, reorder and edit (battery type, mode, currents,
-  capacity, storage voltage, discharge cutoff, cycles). The modes offered follow
-  what the charger allows for each chemistry, and currents are limited to what
-  the integration accepts.
+  capacity, storage voltage, discharge cutoff, cycles and cycle order). The modes
+  offered follow what the charger allows for each chemistry, and values are
+  limited to what the integration accepts.
+- Advanced settings per preset: charge voltage (e.g. 4.10 V for longer Li-ion
+  life), end currents, rest between phases, −ΔV and trickle for NiMH,
+  temperature and time limits, and a Li-ion restart voltage.
+- Cycle runs report the capacity measured during discharge ("1950 mAh out").
 - **Curves:** the Curve button on a slot shows voltage, current, capacity (and
   temperature, if that sensor is enabled in Home Assistant) for the current or
   latest run, updating live. Touch or drag to read values at any moment.

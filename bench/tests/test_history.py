@@ -60,7 +60,7 @@ def test_find_runs():
 def test_archive_and_merge(tmp_path):
     archive = Archive(tmp_path / "runs")
     old = Run(2, 1000.0, 2000.0, "nimh", "discharge", "Done", 900, 1000,
-              {"voltage": [(1000.0, 1.4), (2000.0, 1.0)]})
+              curve={"voltage": [(1000.0, 1.4), (2000.0, 1.0)]})
     archive.save(old)
     assert archive.has(old.run_id)
     loaded = archive.load(old.run_id)
@@ -116,3 +116,20 @@ def test_service_and_dialogs(qapp, tmp_path):
     curve.done(0)
     window._curve_dialogs.remove(curve)
     window.close()
+
+
+
+def test_cycle_run_reports_discharged_capacity():
+    charger = find_charger(registry())
+    st = "sensor.skyrc_mc5000_4036_slot_4_status"
+    cap = "sensor.skyrc_mc5000_4036_slot_4_capacity"
+    raw = {st: [{"s": "discharging", "lu": 0}, {"s": "resting", "lu": 1000},
+                {"s": "charging", "lu": 1600}, {"s": "done", "lu": 9000}],
+           cap: [{"s": "300", "lu": 900}, {"s": "1950", "lu": 999}, {"s": "0", "lu": 1600},
+                 {"s": "2010", "lu": 8900}],
+           "sensor.skyrc_mc5000_4036_slot_4_operation": [{"s": "cycle", "lu": 0}]}
+    (run,) = find_runs(4, charger, parse_history(raw), 10000)
+    assert run.outcome == "Done"
+    assert run.discharged == 1950 and run.capacity == 2010
+    from mc5000_bench.history_ui import capacity_text
+    assert capacity_text(run) == "1950 mAh out"

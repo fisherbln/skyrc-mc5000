@@ -151,12 +151,18 @@ def _disconnect(service: HistoryService, runs_slot: Any, curve_slot: Any) -> Non
             pass
 
 
+def capacity_text(run: Run) -> str:
+    if run.operation == "cycle" and run.discharged:
+        return f"{run.discharged:.0f} mAh out"
+    return f"{run.capacity:.0f} mAh" if run.capacity else "–"
+
+
 def run_title(run: Run) -> str:
     when = datetime.fromtimestamp(run.start).strftime("%a %b %-d, %-I:%M %p")
     what = f"{chem.label(run.chemistry)} {chem.operation_label(run.operation).lower()}"
     bits = [f"Slot {run.slot}", what, run.outcome]
     if run.capacity:
-        bits.append(f"{run.capacity:.0f} mAh")
+        bits.append(capacity_text(run))
     if run.duration_s:
         bits.append(format_elapsed(run.duration_s))
     return f"{when} · " + " · ".join(bits)
@@ -285,7 +291,7 @@ class HistoryDialog(QDialog):
                 chem.label(run.chemistry),
                 chem.operation_label(run.operation),
                 run.outcome,
-                f"{run.capacity:.0f} mAh" if run.capacity else "–",
+                capacity_text(run),
                 format_elapsed(run.duration_s) if run.duration_s else "–",
             ]
             for col, text in enumerate(cells):

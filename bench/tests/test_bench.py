@@ -45,6 +45,11 @@ def test_preset_rules():
     # Discharge current doesn't matter for a charge-only preset.
     assert Preset("x", "liion", "charge", 2000, discharge_current=9).problems() == []
     assert Preset("x", "liion", "storage", 2000, storage_voltage=4300).problems()
+    assert Preset("x", "liion", "charge", 2000, charge_voltage=4300).problems()
+    assert Preset("x", "nimh", "charge", 2000, trickle_current=55).problems()
+    assert Preset("x", "nimh", "charge", 2000, protection_temperature=80).problems()
+    assert Preset("x", "liion", "charge", 2000, restart_voltage=4200).problems()
+    assert Preset("x", "nimh", "cycle", 2000, cycle_mode="sideways").problems()
 
 
 def test_service_data():
@@ -54,7 +59,22 @@ def test_service_data():
         "slot": "3", "battery_type": "liion", "operation": "storage", "capacity": 5000,
         "charge_current": 1.0, "discharge_current": 1.0, "cycle_count": 1,
         "storage_voltage": 3800, "config_entry_id": ENTRY,
+        "charge_end_current": 100, "discharge_end_current": 100, "rest_time": 10,
+        "delta_v": 6, "trickle_current": 0, "protection_temperature": 60,
+        "protection_time": 0,
     }
+    # Defaults leave out the fields older integrations don't know.
+    assert "cycle_mode" not in data and "restart_voltage" not in data
+    nimh_test = next(p for p in DEFAULT_PRESETS if p.name == "NiMH capacity test")
+    cyc = nimh_test.service_data(1)
+    assert cyc["cycle_mode"] == "discharge_charge" and cyc["cycle_count"] == 2
+    assert "D→C ×2" in nimh_test.summary()
+    li = Preset("x", "liion", "charge", 3000, charge_current=1.0, charge_voltage=4100,
+                restart_voltage=4000)
+    assert li.problems() == []
+    d = li.service_data(1)
+    assert d["charge_voltage"] == 4100 and d["restart_voltage"] == 4000
+    assert "to 4.10 V" in li.summary()
     ebl = next(p for p in DEFAULT_PRESETS if p.name.startswith("Discharge test"))
     assert ebl.service_data(2)["discharge_voltage"] == 1000
 
@@ -262,3 +282,31 @@ def test_charger_offline_message(qapp, tmp_path, monkeypatch):
     assert "not reachable" in window.status.text()
     assert window.cards[1].chip.text() == "Offline"
     assert not window.cards[1].start.isEnabled()
+
+
+
+def test_preset_dialog_advanced(qapp, tmp_path):
+    from mc5000_bench.app import PresetDialog
+
+    store = PresetStore.load(tmp_path / "p.json")
+    dialog = PresetDialog(store)
+    dialog.list.setCurrentRow(2)  # Li-ion charge
+    dialog.show_adv.setChecked(True)
+    assert dialog.charge_v_default.isChecked() and not dialog.charge_v.isEnabled()
+    dialog.charge_v_default.setChecked(False)
+    dialog.charge_v.setValue(4.10)
+    dialog.restart.setValue(4.00)
+    dialog.max_temp.setValue(45)
+    p = dialog.items[2]
+    assert (p.charge_voltage, p.restart_voltage, p.protection_temperature) == (4100, 4000, 45)
+    assert p.problems() == []
+    # The NiMH capacity test shows its cycle order.
+    dialog.list.setCurrentRow(4)
+    assert dialog.cycle_mode.currentData() == "discharge_charge"
+    dialog.cycle_mode.setCurrentIndex(dialog.cycle_mode.findData("charge_discharge"))
+    assert dialog.items[4].cycle_mode == "charge_discharge"
+    # Switching battery type resets the charge voltage to that type's full charge.
+    dialog.list.setCurrentRow(2)
+    dialog.battery.setCurrentIndex(dialog.battery.findData("lifepo4"))
+    assert dialog.items[2].charge_voltage is None
+    assert dialog.items[2].restart_voltage == 0
