@@ -96,6 +96,19 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         """Stop the channels in the bitmask (0 = all)."""
         await self._async_command(lambda c: c.stop_charge_multi(channels))
 
+    async def async_send_raw(self, command: int, payload: bytes) -> bytes | None:
+        """Send one raw frame and return the charger's reply (None on timeout).
+
+        For testing commands that have no entity yet; see the send_command service.
+        """
+        result: list[bytes | None] = []
+
+        async def go(charger) -> None:
+            result.append(await charger._request(command, payload))  # noqa: SLF001
+
+        await self._async_command(go)
+        return result[0] if result else None
+
     async def _async_command(self, command) -> None:
         if self.paused:
             raise HomeAssistantError(

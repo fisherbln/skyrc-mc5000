@@ -4,7 +4,7 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
-from homeassistant.core import Event, HomeAssistant, ServiceCall
+from homeassistant.core import Event, HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
@@ -27,6 +27,31 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 type Mc5000ConfigEntry = ConfigEntry[Mc5000Coordinator]
 
 SERVICE_START_PROGRAM = "start_program"
+SERVICE_SEND_COMMAND = "send_command"
+
+# Commands send_command refuses: firmware update (0x60-0x62), factory reset
+# (0x97) and changing the Bluetooth password (0x56). Those stay in the SkyRC app.
+BLOCKED_COMMANDS = {0x56, 0x60, 0x61, 0x62, 0x97}
+
+
+def _hex_bytes(value: object) -> bytes:
+    text = str(value or "").replace(",", " ").replace("0x", "").split()
+    try:
+        data = bytes(int(part, 16) for part in text)
+    except ValueError as err:
+        raise vol.Invalid("payload must be hex bytes, e.g. '04' or '00 01'") from err
+    if len(data) > 40:
+        raise vol.Invalid("payload is limited to 40 bytes")
+    return data
+
+
+SEND_COMMAND_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("command"): vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
+        vol.Optional("payload", default=""): _hex_bytes,
+    }
+)
 
 
 _current = vol.All(vol.Coerce(float), vol.Range(min=0, max=3.0))
@@ -108,6 +133,25 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.services.async_register(
         DOMAIN, SERVICE_START_PROGRAM, async_start_program, schema=START_PROGRAM_SCHEMA
+    )
+
+    async def async_send_command(call: ServiceCall) -> ServiceResponse:
+        command = call.data["command"]
+        if command in BLOCKED_COMMANDS:
+            raise ServiceValidationError(
+                f"Command 0x{command:02x} is blocked (firmware, factory reset or password); "
+                "use the SkyRC app for that"
+            )
+        coordinator = _coordinator_for_call(hass, call)
+        reply = await coordinator.async_send_raw(command, call.data["payload"])
+        return {
+            "sent": f"{command:02x} {call.data['payload'].hex(' ')}".strip(),
+            "reply": reply.hex(" ") if reply else None,
+        }
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEND_COMMAND, async_send_command, schema=SEND_COMMAND_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
     return True
 

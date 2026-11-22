@@ -85,3 +85,17 @@ start_program:
       default: 0
       selector:
         number: { min: 0, max: 1440, unit_of_measurement: min, mode: box }
+
+send_command:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: skyrc_mc5000
+    command:
+      required: true
+      selector:
+        number: { min: 0, max: 255, mode: box }
+    payload:
+      selector:
+        text:

@@ -267,6 +267,24 @@
           "description": "0 = charger default."
         }
       }
+    },
+    "send_command": {
+      "name": "Send raw command",
+      "description": "For testing protocol commands: send one frame and return the charger's reply. Firmware, factory reset and password commands are refused.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Charger",
+          "description": "Only needed when more than one MC5000 is set up."
+        },
+        "command": {
+          "name": "Command",
+          "description": "Command byte, e.g. 150 for 0x96."
+        },
+        "payload": {
+          "name": "Payload",
+          "description": "Hex bytes, e.g. '04'."
+        }
+      }
     }
   }
 }

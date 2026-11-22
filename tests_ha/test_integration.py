@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_BLUETOOTH, SOURCE_USER
@@ -288,3 +288,23 @@ async def test_keeps_polling_while_connected_and_not_advertising(
         await hass.async_block_till_done()
     assert coordinator.last_update_success
     assert hass.states.get("sensor.skyrc_mc5000_4036_slot_1_voltage").state == "1.295"
+
+
+async def test_send_command(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    mock_charger._request = AsyncMock(return_value=bytes.fromhex("0f0d96000102010103000000000000a2"))
+    reply = await hass.services.async_call(
+        DOMAIN, "send_command", {"command": 150, "payload": "04"},
+        blocking=True, return_response=True,
+    )
+    mock_charger._request.assert_awaited_with(150, b"\x04")
+    assert reply["sent"] == "96 04"
+    assert reply["reply"].startswith("0f 0d 96")
+    # Firmware, factory reset and password commands never reach the charger.
+    mock_charger._request.reset_mock()
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "send_command", {"command": 0x97, "payload": "04"},
+            blocking=True, return_response=True,
+        )
+    mock_charger._request.assert_not_awaited()
