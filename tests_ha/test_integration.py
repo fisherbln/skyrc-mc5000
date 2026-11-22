@@ -5,7 +5,7 @@ from homeassistant.config_entries import SOURCE_BLUETOOTH, SOURCE_USER
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.service_info.bluetooth import BluetoothServiceInfo
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from skyrc_ble import Mc5000BatteryType, Mc5000Operation
@@ -308,3 +308,46 @@ async def test_send_command(hass: HomeAssistant, mock_charger) -> None:
             blocking=True, return_response=True,
         )
     mock_charger._request.assert_not_awaited()
+
+
+async def test_system_settings(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    backlight = "select.skyrc_mc5000_4036_lcd_backlight"
+    assert hass.states.get(backlight).state == "low"
+    assert hass.states.get("select.skyrc_mc5000_4036_screen_timeout").state == "off"
+    assert hass.states.get("select.skyrc_mc5000_4036_keypress_beep").state == "off"
+    assert hass.states.get("select.skyrc_mc5000_4036_notify_beep").state == "low"
+    assert hass.states.get("select.skyrc_mc5000_4036_completion_tone").state == "once"
+
+    from dataclasses import replace
+
+    current = mock_charger.get_settings.return_value
+    mock_charger.get_settings.side_effect = [current, replace(current, backlight=3)]
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": backlight, "option": "high"}, blocking=True
+    )
+    written = mock_charger.set_settings.await_args.args[0]
+    assert written == replace(current, backlight=3)  # nothing else changed
+    assert hass.states.get(backlight).state == "high"
+
+
+async def test_settings_write_refused(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    mock_charger.set_settings.return_value = False
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": "select.skyrc_mc5000_4036_notify_beep", "option": "high"},
+            blocking=True,
+        )
+
+
+async def test_usb_sensors_and_firmware(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    assert float(hass.states.get("sensor.skyrc_mc5000_4036_usb_c_voltage").state) == 15.264
+    assert float(hass.states.get("sensor.skyrc_mc5000_4036_usb_c_power").state) == 33.12
+    assert float(hass.states.get("sensor.skyrc_mc5000_4036_usb_c_energy").state) == 0.23
+    from homeassistant.helpers import device_registry as dr
+
+    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, ADDRESS)})
+    assert device.sw_version == "2.02" and device.hw_version == "2"

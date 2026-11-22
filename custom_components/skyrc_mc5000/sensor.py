@@ -15,12 +15,14 @@ from homeassistant.const import (
     EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from skyrc_ble import Mc5000ChannelData
+from skyrc_ble import Mc5000ChannelData, Mc5000UsbStatus
 from skyrc_ble.models import (
     Mc5000BatteryType,
     Mc5000ChannelStatus,
@@ -148,6 +150,66 @@ async def async_setup_entry(
         for slot in SLOTS
         for description in SENSORS
     )
+    async_add_entities(Mc5000UsbSensor(coordinator, d) for d in USB_SENSORS)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Mc5000UsbDescription(SensorEntityDescription):
+    value_fn: Callable[[Mc5000UsbStatus], Any]
+
+
+USB_SENSORS: tuple[Mc5000UsbDescription, ...] = (
+    Mc5000UsbDescription(
+        key="usb_voltage", translation_key="usb_voltage",
+        device_class=SensorDeviceClass.VOLTAGE, state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        suggested_display_precision=2, value_fn=lambda u: u.voltage,
+    ),
+    Mc5000UsbDescription(
+        key="usb_current", translation_key="usb_current",
+        device_class=SensorDeviceClass.CURRENT, state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        suggested_display_precision=2, value_fn=lambda u: u.current,
+    ),
+    Mc5000UsbDescription(
+        key="usb_power", translation_key="usb_power",
+        device_class=SensorDeviceClass.POWER, state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        suggested_display_precision=1, value_fn=lambda u: u.power,
+    ),
+    Mc5000UsbDescription(
+        # The charger restarts this counter for each device plugged in.
+        key="usb_energy", translation_key="usb_energy",
+        device_class=SensorDeviceClass.ENERGY, state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        suggested_display_precision=2, value_fn=lambda u: u.energy,
+    ),
+    Mc5000UsbDescription(
+        key="usb_runtime", translation_key="usb_runtime",
+        device_class=SensorDeviceClass.DURATION, state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.SECONDS, suggested_unit_of_measurement=UnitOfTime.MINUTES,
+        value_fn=lambda u: u.runtime,
+    ),
+)
+
+
+class Mc5000UsbSensor(Mc5000Entity, SensorEntity):
+    """The charger's USB-C PD port."""
+
+    entity_description: Mc5000UsbDescription
+
+    def __init__(self, coordinator, description: Mc5000UsbDescription) -> None:
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.usb is not None
+
+    @property
+    def native_value(self):
+        usb = self.coordinator.usb
+        return None if usb is None else self.entity_description.value_fn(usb)
 
 
 class Mc5000SlotSensor(Mc5000Entity, SensorEntity):

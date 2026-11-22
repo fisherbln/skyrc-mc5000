@@ -4,6 +4,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from skyrc_ble import Mc5000DeviceInfo, Mc5000Settings, Mc5000UsbStatus
 from bleak.backends.device import BLEDevice
 from skyrc_ble.mc5000 import parse_channel_data
 from skyrc_ble.models import Mc5000State
@@ -41,6 +42,18 @@ def mock_charger():
     charger.disconnect = AsyncMock()
     charger.start_program_multi = AsyncMock()
     charger.stop_charge_multi = AsyncMock()
+    # Readings from the real charger (firmware 2.02) on 2026-11-22.
+    charger.get_settings = AsyncMock(return_value=Mc5000Settings(
+        keypress_beep=0, notify_beep=1, completion_repeat=False,
+        backlight=1, warning=1, screen_timeout=0,
+    ))
+    charger.set_settings = AsyncMock(return_value=True)
+    charger.get_usb_status = AsyncMock(return_value=Mc5000UsbStatus(
+        status=2, current=2.17, voltage=15.264, energy=0.23, runtime=47,
+    ))
+    charger.get_device_info = AsyncMock(return_value=Mc5000DeviceInfo(
+        model_code="100214", firmware="2.02", hardware="2",
+    ))
 
     ble_device = BLEDevice(ADDRESS, "#Charger-4036", None)
     with patch(

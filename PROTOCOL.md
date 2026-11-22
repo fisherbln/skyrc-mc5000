@@ -53,9 +53,10 @@ Bitmask: slot 1 = `0x01`, slot 2 = `0x02`, slot 3 = `0x04`, slot 4 = `0x08`.
 | `0x91` | slot status | `[mask]` | status frame (below) |
 | `0x94` | program + start | 40 bytes (below) | `[.., ok]`, byte 4 == 1 = success |
 | `0xFE` | stop | `[mask]` (0 = all) | byte 4 == 1 = success |
-| `0x96` | query system settings | `[0x04]` | settings frame |
-| `0x95` | write system settings | `MachineBean.getMc5000SystemSettingData()` | byte 4 == 1 = success |
-| `0x9B` | USB-C PD port status | `[0x00]` | PD status frame (≥18 bytes) |
+| `0x96` | query system settings | `[0x04]` | settings frame (below) |
+| `0x95` | write system settings | 17 bytes (below) | byte 4 == 1 = success |
+| `0x9B` | USB-C PD port status | `[0x00]` | USB-C frame (below) |
+| `0x57` | device info | 17 bytes: `00` + MAC byte-reversed + zeros | info frame (below) |
 | `0x93` | query slot program (unverified) | `[mask]` | program frame |
 
 Examples: status slot 1 `0f 03 91 01 92`; stop all `0f 03 fe 00 fe`;
@@ -125,3 +126,27 @@ The app refuses charge voltages above the default column.
 | 33–34 | storage voltage, mV | chemistry default |
 | 35 | Eneloop sub-type | 0 |
 | 36–39 | zero | |
+
+
+## System settings, USB-C and device info (hardware-verified 2026-11-22, firmware 2.02)
+
+**Settings reply (`0x96`)**, e.g. `0f 09 96 08 00 01 00 01 01 00 a1`: byte 4 keypress
+beep (0 off, 1 low, 2 medium, 3 high), 5 notify beep (same scale), 6 completion tone
+(0 once, 1 repeat every 30 min), 7 LCD backlight (1 low, 2 medium, 3 high), 8 "warning"
+(no item in the charger's menu; keep as read), 9 screen timeout in minutes (0 off; 1, 3,
+5, 10, 15, 30, 60, 120). Values matched the charger's System Settings menu.
+
+**Settings write (`0x95`)**: 17-byte payload `00 key notify completion backlight warning
+timeout 00 …00`. Writing `00 00 01 00 03 01 00 …` changed the backlight from low to high
+(ack `0f 04 95 10 01 a6`) and the read-back showed it. Reads are read-modify-write: send
+every field back as read.
+
+**USB-C (`0x9B`)**: byte 4 status (0 idle; 2 while powering a phone), 5–6 current mA,
+7–8 voltage mV, 9–12 energy mWh, 13–16 seconds on (all big-endian). Example with a phone
+charging: `0f 10 9b 00 02 08 7a 3b a0 00 00 00 e6 00 00 00 2f 0f` = 2.17 A, 15.264 V,
+230 mWh, 47 s. The port is bidirectional (PD 3.0 input up to 100 W, output up to 65 W);
+only output has been observed.
+
+**Device info (`0x57`)**: reply `0f 13 57 00 31 30 30 32 31 34 04 00 00 00 00 02 02 02 00 ce 57`:
+bytes 4–9 ASCII model code `100214`, bytes 15–16 firmware `2.02`, hardware revision from
+the hex of bytes 4–19 (character 27) = `2`.

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+from dataclasses import replace
 from datetime import timedelta
 
 from bleak.exc import BleakError
@@ -10,13 +12,25 @@ from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from skyrc_ble import Mc5000, Mc5000Program, Mc5000State
+from skyrc_ble import (
+    Mc5000,
+    Mc5000DeviceInfo,
+    Mc5000Program,
+    Mc5000Settings,
+    Mc5000State,
+    Mc5000UsbStatus,
+)
 
 from .const import CONF_ADDRESS, DOMAIN, SLOTS, UPDATE_INTERVAL_SECONDS
 from .program import SlotProgram
 
 _LOGGER = logging.getLogger(__name__)
+
+# Settings only change from the charger's menu or this integration, so a
+# slow re-read is enough to pick up changes made on the charger.
+SETTINGS_REFRESH_S = 300
 
 
 class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
@@ -37,6 +51,11 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         self.paused = False
         self._lock = asyncio.Lock()
         self.programs: dict[int, SlotProgram] = {slot: SlotProgram() for slot in SLOTS}
+        # System settings, USB-C port and firmware, read alongside the slots.
+        self.settings: Mc5000Settings | None = None
+        self.usb: Mc5000UsbStatus | None = None
+        self.device_info: Mc5000DeviceInfo | None = None
+        self._settings_read = 0.0
 
     async def _async_connected_charger(self) -> Mc5000:
         """Return a connected charger, connecting through HA Bluetooth if needed."""
@@ -67,6 +86,7 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
             try:
                 charger = await self._async_connected_charger()
                 await charger.update()
+                await self._async_read_extras(charger)
                 if not charger.is_connected:
                     # The library swallows errors once the link has dropped;
                     # don't report the previous readings as current.
@@ -76,6 +96,43 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
             except (BleakError, TimeoutError) as err:
                 raise UpdateFailed(f"Error talking to MC5000: {err}") from err
             return charger.state
+
+    async def _async_read_extras(self, charger: Mc5000) -> None:
+        """USB-C every poll; settings every few minutes; firmware once."""
+        self.usb = await charger.get_usb_status()
+        if self.settings is None or time.monotonic() - self._settings_read > SETTINGS_REFRESH_S:
+            settings = await charger.get_settings()
+            if settings is not None:
+                self.settings = settings
+                self._settings_read = time.monotonic()
+        if self.device_info is None:
+            info = await charger.get_device_info()
+            if info is not None:
+                self.device_info = info
+                registry = dr.async_get(self.hass)
+                device = registry.async_get_device(identifiers={(DOMAIN, self.address)})
+                if device is not None:
+                    registry.async_update_device(
+                        device.id, sw_version=info.firmware, hw_version=info.hardware
+                    )
+
+    async def async_set_settings(self, **changes) -> None:
+        """Change system settings (read-modify-write) and confirm by reading back."""
+        result: list[Mc5000Settings | None] = []
+
+        async def go(charger: Mc5000) -> None:
+            current = await charger.get_settings() or self.settings
+            if current is None:
+                raise HomeAssistantError("Couldn't read the MC5000's settings")
+            if not await charger.set_settings(replace(current, **changes)):
+                raise HomeAssistantError("The MC5000 didn't accept the settings")
+            result.append(await charger.get_settings())
+
+        await self._async_command(go)
+        if result and result[0] is not None:
+            self.settings = result[0]
+            self._settings_read = time.monotonic()
+        self.async_update_listeners()
 
     async def async_start_program(self, channels: int, program: Mc5000Program) -> None:
         """Send a program to the channels in the bitmask and start it."""

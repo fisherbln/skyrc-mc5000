@@ -91,6 +91,21 @@
       },
       "temperature": {
         "name": "Slot {slot} temperature"
+      },
+      "usb_voltage": {
+        "name": "USB-C voltage"
+      },
+      "usb_current": {
+        "name": "USB-C current"
+      },
+      "usb_power": {
+        "name": "USB-C power"
+      },
+      "usb_energy": {
+        "name": "USB-C energy"
+      },
+      "usb_runtime": {
+        "name": "USB-C time on"
       }
     },
     "button": {
@@ -134,6 +149,53 @@
           "cycle": "Cycle",
           "refresh": "Refresh",
           "breakin": "Break-in"
+        }
+      },
+      "backlight": {
+        "name": "LCD backlight",
+        "state": {
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        }
+      },
+      "screen_timeout": {
+        "name": "Screen timeout",
+        "state": {
+          "off": "Off",
+          "1_min": "1 min",
+          "3_min": "3 min",
+          "5_min": "5 min",
+          "10_min": "10 min",
+          "15_min": "15 min",
+          "30_min": "30 min",
+          "60_min": "60 min",
+          "120_min": "120 min"
+        }
+      },
+      "keypress_beep": {
+        "name": "Keypress beep",
+        "state": {
+          "off": "Off",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        }
+      },
+      "notify_beep": {
+        "name": "Notify beep",
+        "state": {
+          "off": "Off",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High"
+        }
+      },
+      "completion_tone": {
+        "name": "Completion tone",
+        "state": {
+          "once": "Once",
+          "repeat": "Repeat every 30 min"
         }
       }
     },
