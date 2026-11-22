@@ -48,6 +48,7 @@ from .charger import (
 )
 from .config import config_dir, load_json, load_settings, save_json, save_settings, Settings
 from .ha import HaClient
+from .history_ui import CurveDialog, HistoryDialog, HistoryService
 from .presets import Preset, PresetStore
 
 STATUS_COLORS = {
@@ -81,7 +82,9 @@ QPushButton#start:disabled { background: palette(midlight); border-color: palett
                              color: palette(placeholder-text); }
 QPushButton#stop { font-weight: 600; color: #e53935; border-color: #e53935; }
 QPushButton#stop:disabled { color: palette(placeholder-text); border-color: palette(midlight); }
+QPushButton#small { min-height: 40px; padding: 0 16px; font-size: 13pt; }
 QComboBox { min-height: 52px; padding: 0 12px; }
+QTableWidget { font-size: 13pt; }
 QComboBox QAbstractItemView::item { min-height: 48px; }
 QListWidget::item { min-height: 48px; padding: 0 8px; }
 QSpinBox, QDoubleSpinBox, QLineEdit { min-height: 48px; }
@@ -114,9 +117,13 @@ class SlotCard(QFrame):
         title.setObjectName("slotTitle")
         self.chip = QLabel("Offline")
         self.chip.setObjectName("chip")
+        self.curve = QPushButton("Curve")
+        self.curve.setObjectName("small")
+        self.curve.clicked.connect(self._show_curve)
         top.addWidget(title)
         top.addStretch()
         top.addWidget(self.chip)
+        top.addWidget(self.curve)
         root.addLayout(top)
 
         grid = QGridLayout()
@@ -277,6 +284,9 @@ class SlotCard(QFrame):
     def _stop(self) -> None:
         self.main.stop_slot(self.slot)
 
+    def _show_curve(self) -> None:
+        self.main.show_curve(self.slot)
+
 
 class PresetDialog(QDialog):
     """Add, change and delete presets."""
@@ -295,7 +305,7 @@ class PresetDialog(QDialog):
         left.addWidget(self.list, 1)
         row = QHBoxLayout()
         for text, fn in (("Add", self._add), ("Copy", self._copy), ("Delete", self._delete),
-                         ("Up", lambda: self._move(-1)), ("Down", lambda: self._move(1))):
+                         ("Up", self._up), ("Down", self._down)):
             btn = QPushButton(text)
             btn.clicked.connect(fn)
             row.addWidget(btn)
@@ -509,6 +519,12 @@ class PresetDialog(QDialog):
             if not self.items:
                 self._enable_form(False)
 
+    def _up(self) -> None:
+        self._move(-1)
+
+    def _down(self) -> None:
+        self._move(1)
+
     def _move(self, delta: int) -> None:
         row = self.list.currentRow()
         new = row + delta
@@ -595,6 +611,8 @@ class MainWindow(QMainWindow):
         self.dot = QLabel("●")
         self.status = QLabel("Not connected")
         self.status.setObjectName("muted")
+        history_btn = QPushButton("History")
+        history_btn.clicked.connect(self.show_history)
         presets_btn = QPushButton("Presets")
         presets_btn.clicked.connect(self.edit_presets)
         settings_btn = QPushButton("Settings")
@@ -606,6 +624,7 @@ class MainWindow(QMainWindow):
         header.addSpacing(12)
         header.addWidget(self.dot)
         header.addWidget(self.status, 1)
+        header.addWidget(history_btn)
         header.addWidget(presets_btn)
         header.addWidget(settings_btn)
         header.addWidget(self.stop_all)
@@ -645,6 +664,10 @@ class MainWindow(QMainWindow):
         self.client.charger_found.connect(self._charger_found)
         self.client.states_changed.connect(self._states_changed)
         self.client.service_failed.connect(self._service_failed)
+        # Weak link back to the window (see SlotCard) so no Qt reference cycle forms.
+        self.history = HistoryService(self.client, weakref.proxy(self))
+        self._curve_dialogs: list[CurveDialog] = []
+        self._swept = False
         if self.settings.complete:
             self.client.connect_to(self.settings.url, self.settings.token, self.settings.verify_tls)
 
@@ -677,6 +700,15 @@ class MainWindow(QMainWindow):
                 changed_results = True
         if changed_results:
             save_json("results.json", {str(k): asdict(v) for k, v in self.tracker.results.items()})
+        # Copy finished runs into the local archive: once after connecting
+        # (catches runs from while the app was closed) and after each run ends.
+        if not self._swept and self.charger.found:
+            self._swept = True
+            self.history.load_runs(days=12)
+        elif changed_results:
+            self.history.load_runs(days=2)
+        for dialog in list(self._curve_dialogs):
+            dialog.live(self.charger, states)
         conn = states.get(self.charger.connection or "", {})
         paused = conn.get("state") == "off"
         self.banner_box.setVisible(paused)
@@ -718,6 +750,19 @@ class MainWindow(QMainWindow):
     def _reconnect_charger(self) -> None:
         if self.charger.connection:
             self.client.call_service("switch", "turn_on", entity_id=self.charger.connection)
+
+    # ----- history -----
+
+    def show_history(self) -> None:
+        HistoryDialog(self.history, self).exec()
+
+    def show_curve(self, slot: int) -> None:
+        dialog = CurveDialog(slot, self.history, self)
+        self._curve_dialogs.append(dialog)
+        try:
+            dialog.exec()
+        finally:
+            self._curve_dialogs.remove(dialog)
 
     # ----- presets & settings -----
 

@@ -9,6 +9,8 @@ Assistant's WebSocket API, so you can use it alongside the dashboard.
 
 ![MC5000 Bench](screenshot.png)
 
+![Run history with a curve](screenshot-history.png)
+
 - Four slot cards with live voltage, current, mAh, time and internal resistance.
 - A preset picker on every slot: pick "Eneloop charge" or "Li-ion storage", press
   Start, confirm.
@@ -16,9 +18,16 @@ Assistant's WebSocket API, so you can use it alongside the dashboard.
   capacity, storage voltage, discharge cutoff, cycles). The modes offered follow
   what the charger allows for each chemistry, and currents are limited to what
   the integration accepts.
-- Each slot remembers how its last run ended (Done, Stopped or the charger's
-  error) with the final mAh and time, even though the charger itself zeroes the
-  counter on an error. Runs are only recorded while the app is open.
+- **Curves:** the Curve button on a slot shows voltage, current, capacity (and
+  temperature, if that sensor is enabled in Home Assistant) for the current or
+  latest run, updating live. Touch or drag to read values at any moment.
+- **History:** every run from Home Assistant's recorded history, even ones that
+  ran while the app was closed, with its result (Done, Stopped or the charger's
+  error), final mAh and time, and its curve. The charger zeroes its mAh counter
+  when a run ends in an error; the history keeps the last reading before that.
+- Finished runs are copied to `~/.local/share/mc5000-bench/runs/`, so they stay
+  after Home Assistant purges old history (10 days by default). Open the app at
+  least once within that window to keep every run.
 - Stop per slot, Stop all, and a banner with a Reconnect button when Home
   Assistant's charger connection is paused for the SkyRC app.
 

@@ -1,3 +1,3 @@
 """MC5000 Bench: control a SkyRC MC5000 through Home Assistant."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

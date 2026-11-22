@@ -69,11 +69,73 @@ def sample_states() -> dict[str, dict[str, Any]]:
     return states
 
 
+def _sensor(slot: int, key: str) -> str:
+    return f"sensor.skyrc_mc5000_4036_slot_{slot}_{key}"
+
+
+def sample_history(now: float) -> dict[str, list[dict[str, Any]]]:
+    """Three runs: an EBL discharge that ends in a connection break (slot 2,
+    two days ago), a Li-ion storage top-up (slot 3, yesterday) and the Eneloop
+    charge still running on slot 1."""
+    h: dict[str, list[dict[str, Any]]] = {}
+
+    def add(slot: int, key: str, t: float, value: Any) -> None:
+        h.setdefault(_sensor(slot, key), []).append({"s": str(value), "lu": t})
+
+    # Slot 2: 0.5 A discharge for 8355 s, 1160 mAh, then the cell cuts out.
+    t0 = now - 2 * 86400
+    add(2, "status", t0 - 600, "standby")
+    add(2, "error", t0 - 600, "none")
+    add(2, "chemistry", t0 - 600, "nimh")
+    add(2, "operation", t0, "discharge")
+    add(2, "status", t0, "discharging")
+    for i in [*range(0, 8355, 60), 8355]:
+        frac = i / 8355
+        add(2, "voltage", t0 + i, round(1.49 - 0.03 * frac - (0.02 if frac > 0.97 else 0), 3))
+        add(2, "current", t0 + i, 0.5)
+        add(2, "capacity", t0 + i, round(1160 * frac))
+        add(2, "elapsed", t0 + i, round(i / 60, 2))
+    # An HA restart in the middle must not split the run.
+    add(2, "status", t0 + 4000, "unavailable")
+    add(2, "status", t0 + 4010, "discharging")
+    end = t0 + 8360
+    add(2, "status", end, "standby")
+    add(2, "error", end, "connection_break")
+    add(2, "capacity", end, 0)
+    add(2, "voltage", end, 0.0)
+    add(2, "current", end, 0.0)
+    # Slot 3: storage top-up, charging 3.66 -> 3.80 V, done after 18 min.
+    t1 = now - 86400
+    add(3, "chemistry", t1 - 60, "liion")
+    add(3, "operation", t1, "storage")
+    add(3, "status", t1, "charging")
+    for i in range(0, 1093, 30):
+        add(3, "voltage", t1 + i, round(3.70 + 0.10 * i / 1092, 3))
+        add(3, "current", t1 + i, 1.0 if i < 900 else 0.4)
+        add(3, "capacity", t1 + i, round(342 * i / 1092))
+        add(3, "elapsed", t1 + i, round(i / 60, 2))
+    add(3, "status", t1 + 1095, "done")
+    # Slot 1: Eneloop charge running for 47.5 min.
+    t2 = now - 2850
+    add(1, "chemistry", t2, "eneloop")
+    add(1, "operation", t2, "charge")
+    add(1, "status", t2, "charging")
+    for i in range(0, 2851, 30):
+        add(1, "voltage", t2 + i, round(1.30 + 0.112 * i / 2850, 3))
+        add(1, "current", t2 + i, 1.0)
+        add(1, "capacity", t2 + i, round(812 * i / 2850))
+        add(1, "elapsed", t2 + i, round(i / 60, 2))
+    return h
+
+
 class FakeHA:
     """Runs on its own thread; records service calls and can push state changes."""
 
     def __init__(self) -> None:
+        import time as _time
+
         self.states = sample_states()
+        self.history = sample_history(_time.time())
         self.calls: list[dict[str, Any]] = []
         self.fail_services = False
         self._loop = asyncio.new_event_loop()
@@ -118,6 +180,9 @@ class FakeHA:
                 await ws.send(json.dumps({"id": mid, "type": "event", "event": {
                     "a": {k: v for k, v in self.states.items() if k in wanted}}}))
                 self._clients.append((ws, mid))
+            elif kind == "history/history_during_period":
+                await ws.send(json.dumps({"id": mid, "type": "result", "success": True,
+                                          "result": self._history(msg)}))
             elif kind == "call_service":
                 self.calls.append(msg)
                 if self.fail_services:
@@ -127,6 +192,22 @@ class FakeHA:
                 else:
                     await ws.send(json.dumps({"id": mid, "type": "result", "success": True,
                                               "result": {}}))
+
+    def _history(self, msg: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        from datetime import datetime
+
+        start = datetime.fromisoformat(msg["start_time"]).timestamp()
+        end = datetime.fromisoformat(msg["end_time"]).timestamp()
+        out = {}
+        for eid in msg["entity_ids"]:
+            items = sorted(self.history.get(eid, []), key=lambda i: i["lu"])
+            before = [i for i in items if i["lu"] < start]
+            inside = [i for i in items if start <= i["lu"] <= end]
+            if before:
+                inside.insert(0, {"s": before[-1]["s"], "lu": start})
+            if inside:
+                out[eid] = inside
+        return out
 
     def push(self, changes: dict[str, str]) -> None:
         """Change entity states and tell subscribers (compressed format)."""

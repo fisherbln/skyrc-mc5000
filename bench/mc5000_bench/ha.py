@@ -65,6 +65,7 @@ class HaClient(QObject):
     charger_found = Signal(object)  # ChargerEntities
     states_changed = Signal(object)  # dict entity_id -> {"state", "attributes"}
     service_failed = Signal(str)  # message for the user
+    response = Signal(str, object, str)  # key, result (None on failure), error message
 
     def __init__(self) -> None:
         super().__init__()
@@ -100,16 +101,49 @@ class HaClient(QObject):
             msg["target"] = {"entity_id": entity_id}
         asyncio.run_coroutine_threadsafe(self._call(msg), self._loop)
 
+    def request(self, key: str, msg: dict[str, Any], timeout: float = 60) -> None:
+        """Send any WebSocket command; the answer arrives on the response signal."""
+        async def go() -> None:
+            try:
+                result = await self._request(msg, timeout)
+            except Exception as err:  # noqa: BLE001
+                self.response.emit(key, None, str(err) or err.__class__.__name__)
+                return
+            if result.get("success"):
+                self.response.emit(key, result.get("result"), "")
+            else:
+                self.response.emit(key, None, (result.get("error") or {}).get("message", "failed"))
+
+        asyncio.run_coroutine_threadsafe(go(), self._loop)
+
+    def history(self, key: str, entity_ids: list[str], start: float, end: float) -> None:
+        from .history import iso
+
+        self.request(key, {
+            "type": "history/history_during_period",
+            "start_time": iso(start),
+            "end_time": iso(end),
+            "entity_ids": entity_ids,
+            "minimal_response": True,
+            "no_attributes": True,
+            "significant_changes_only": False,
+        })
+
     def press(self, entity_id: str) -> None:
         self.call_service("button", "press", entity_id=entity_id)
 
     def shutdown(self) -> None:
+        """Close the connection and wait for the network thread to finish."""
+        if not self._thread.is_alive():
+            return
+
         def stop() -> None:
             if self._task:
                 self._task.cancel()
             self._loop.call_later(0.2, self._loop.stop)
 
         self._loop.call_soon_threadsafe(stop)
+        self._thread.join(timeout=3)
 
     # ----- asyncio side -----
 
