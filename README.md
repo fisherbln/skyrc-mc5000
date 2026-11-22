@@ -66,6 +66,21 @@ live in Home Assistant, survive restarts, and default the voltages to the chemis
 safe values. The **Connection** switch releases the Bluetooth link so the SkyRC app can
 connect. Turn it back on to resume.
 
+Also on the device:
+
+- **Slot N last result**: how the last run ended (done, stopped or the charger's error),
+  with its final mAh, time, battery type and operation as attributes. It keeps the mAh
+  the charger zeroes when a run ends in an error, and survives restarts.
+- **Slot N temperature** (unknown while a slot is empty).
+- **Charger settings** (config selects): LCD backlight, screen timeout, keypress beep,
+  notify beep and completion tone, the same as the charger's System Settings menu.
+- **USB-C port** sensors: voltage, current, power, energy delivered and time on.
+- **Firmware**: the installed version, and an update entity that asks SkyRC's update
+  server (the same request the SkyRC app makes, with the charger's serial code) every
+  12 hours. Installing an update stays in the SkyRC app.
+- `skyrc_mc5000.send_command`: sends one raw frame and returns the reply, for testing
+  protocol commands. Firmware, factory-reset and password commands are refused.
+
 Start a program with the `skyrc_mc5000.start_program` action:
 
 ```yaml
