@@ -112,6 +112,29 @@ async def test_start_program_defaults(hass: HomeAssistant, mock_charger) -> None
     assert program.charge_voltage == 4200
     assert program.discharge_voltage == 3200
     assert program.charge_current == 1.0
+    assert program.cycle_type == 0
+    assert program.maintenance_voltage == 0
+
+
+async def test_start_program_cycle_order(hass: HomeAssistant, mock_charger) -> None:
+    await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN, "start_program",
+        {"slot": "2", "battery_type": "nimh", "operation": "cycle", "capacity": 2000,
+         "charge_current": 0.5, "discharge_current": 0.5, "cycle_count": 2,
+         "cycle_mode": "discharge_charge", "charge_end_current": 50, "rest_time": 30,
+         "delta_v": 4, "trickle_current": 50, "protection_temperature": 45},
+        blocking=True,
+    )
+    _channels, program = mock_charger.start_program_multi.await_args.args
+    assert program.cycle_type == 1 and program.cycle_count == 2
+    assert program.charge_end_current == 50 and program.charge_rest_time == 30
+    assert program.delta_v == 4 and program.trickle_current == 50
+    assert program.protection_temperature == 45
+    from skyrc_ble.mc5000 import build_program_payload
+
+    payload = build_program_payload(0x02, program)
+    assert payload[21] == 1  # cycle mode byte (PROTOCOL.md)
 
 
 @pytest.mark.parametrize(

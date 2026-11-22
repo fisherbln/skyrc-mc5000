@@ -33,6 +33,9 @@ _current = vol.All(vol.Coerce(float), vol.Range(min=0, max=3.0))
 _mv = vol.All(vol.Coerce(int), vol.Range(min=500, max=4400))
 _ma = vol.All(vol.Coerce(int), vol.Range(min=0, max=3000))
 
+# Cycle order, as the charger's cycle_type byte (from the SkyRC app's own code).
+CYCLE_MODES = {"charge_discharge": 0, "discharge_charge": 1}
+
 START_PROGRAM_SCHEMA = vol.Schema(
     {
         vol.Optional("config_entry_id"): cv.string,
@@ -49,6 +52,8 @@ START_PROGRAM_SCHEMA = vol.Schema(
         vol.Optional("discharge_end_current", default=100): _ma,
         vol.Optional("rest_time", default=10): vol.All(vol.Coerce(int), vol.Range(min=0, max=999)),
         vol.Optional("cycle_count", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=99)),
+        vol.Optional("cycle_mode", default="charge_discharge"): vol.In(list(CYCLE_MODES)),
+        vol.Optional("restart_voltage", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=4400)),
         vol.Optional("delta_v", default=6): vol.All(vol.Coerce(int), vol.Range(min=0, max=20)),
         vol.Optional("trickle_current", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=300)),
         vol.Optional("protection_temperature", default=60): vol.All(vol.Coerce(int), vol.Range(min=20, max=71)),
@@ -83,6 +88,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 charge_rest_time=call.data["rest_time"],
                 discharge_rest_time=call.data["rest_time"],
                 cycle_count=call.data["cycle_count"],
+                cycle_type=CYCLE_MODES[call.data["cycle_mode"]],
+                maintenance_voltage=call.data["restart_voltage"],
                 delta_v=call.data["delta_v"],
                 trickle_current=call.data["trickle_current"],
                 protection_temperature=call.data["protection_temperature"],

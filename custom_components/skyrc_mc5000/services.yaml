@@ -59,6 +59,16 @@ start_program:
       default: 1
       selector:
         number: { min: 1, max: 99, mode: box }
+    cycle_mode:
+      default: charge_discharge
+      selector:
+        select:
+          translation_key: cycle_mode
+          options: [charge_discharge, discharge_charge]
+    restart_voltage:
+      default: 0
+      selector:
+        number: { min: 0, max: 4400, step: 10, unit_of_measurement: mV, mode: box }
     delta_v:
       default: 6
       selector:

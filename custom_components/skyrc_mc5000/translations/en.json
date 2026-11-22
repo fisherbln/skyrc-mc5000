@@ -173,6 +173,12 @@
         "refresh": "Refresh",
         "breakin": "Break-in"
       }
+    },
+    "cycle_mode": {
+      "options": {
+        "charge_discharge": "Charge, then discharge",
+        "discharge_charge": "Discharge, then charge"
+      }
     }
   },
   "services": {
@@ -235,6 +241,14 @@
         "cycle_count": {
           "name": "Cycles",
           "description": ""
+        },
+        "cycle_mode": {
+          "name": "Cycle order",
+          "description": "For the cycle operation: charge then discharge (ends empty), or discharge then charge (ends charged)."
+        },
+        "restart_voltage": {
+          "name": "Restart voltage",
+          "description": "After a lithium charge, start charging again if the cell drops below this voltage. 0 = off."
         },
         "delta_v": {
           "name": "-dV",
