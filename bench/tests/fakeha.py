@@ -167,6 +167,8 @@ class FakeHA:
         self.history = sample_history(_time.time())
         self.calls: list[dict[str, Any]] = []
         self.fail_services = False
+        # skyrc_mc5000.get_history replies by slot (missing = not running)
+        self.charger_curves: dict[str, dict] = {}
         self._loop = asyncio.new_event_loop()
         self._clients: list[tuple[Any, int]] = []
         self.port = 0
@@ -218,6 +220,12 @@ class FakeHA:
                     await ws.send(json.dumps({"id": mid, "type": "result", "success": False,
                                               "error": {"code": "service_validation_error",
                                                         "message": "Invalid MC5000 program: nope"}}))
+                elif msg.get("service") == "get_history":
+                    slot = msg["service_data"]["slot"]
+                    reply = self.charger_curves.get(slot) or {
+                        "slot": int(slot), "running": False, "interval": None, "voltages": []}
+                    await ws.send(json.dumps({"id": mid, "type": "result", "success": True,
+                                              "result": {"context": {}, "response": reply}}))
                 else:
                     await ws.send(json.dumps({"id": mid, "type": "result", "success": True,
                                               "result": {}}))

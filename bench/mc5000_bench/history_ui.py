@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from typing import Any, Protocol
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -49,6 +49,7 @@ class HistoryService(QObject):
 
     runs_ready = Signal(object, str)  # list[Run], note for the user ("" if fine)
     curve_ready = Signal(object)  # Run with .curve filled
+    charger_curve_ready = Signal(int)  # slot whose stored curve just arrived
 
     def __init__(self, client: HaClient, source: _Source, archive: Archive | None = None) -> None:
         super().__init__()
@@ -58,6 +59,9 @@ class HistoryService(QObject):
         self._queue: list[Run] = []
         self._archiving: str | None = None
         self._next = 0
+        # slot -> (fetched_at, interval_s, volts): the charger's own 1-second curve
+        # for a running slot, fetched now and then while the run lasts.
+        self.charger_curves: dict[int, tuple[float, int, list[float]]] = {}
         client.response.connect(self._response)
 
     def _key(self, kind: str) -> str:
@@ -91,6 +95,31 @@ class HistoryService(QObject):
                 return
         self._request_curve(run, "curve")
 
+    def fetch_charger_curve(self, slot: int) -> None:
+        """Ask HA for the charger's stored curve of a running slot (integration 0.5+)."""
+        self.client.request(self._key(f"charger:{slot}"), {
+            "type": "call_service", "domain": "skyrc_mc5000", "service": "get_history",
+            "service_data": {"slot": str(slot)}, "return_response": True,
+        }, timeout=30)
+
+    def apply_charger_curve(self, run: Run) -> None:
+        """Use the charger's 1-second voltage samples for the part of the run they cover."""
+        got = self.charger_curves.get(run.slot)
+        if not got:
+            return
+        fetched, interval, volts = got
+        if not volts or not interval:
+            return
+        first = fetched - (len(volts) - 1) * interval
+        end = run.end if run.end is not None else fetched
+        if first < run.start - 120 or fetched < run.start:
+            return  # those samples belong to another run
+        points = [(first + i * interval, v) for i, v in enumerate(volts)]
+        points = [p for p in points if run.start - 120 <= p[0] <= end + 1]
+        older = [p for p in run.curve.get("voltage", []) if p[0] < first]
+        newer = [p for p in run.curve.get("voltage", []) if p[0] > fetched]
+        run.curve["voltage"] = older + points + newer
+
     def _request_curve(self, run: Run, kind: str) -> None:
         charger = self.source.charger
         ids = [charger.slots[run.slot][k] for k in CURVE_KEYS if k in charger.slots.get(run.slot, {})]
@@ -104,6 +133,17 @@ class HistoryService(QObject):
 
     def _response(self, key: str, result: Any, error: str) -> None:
         if not key.startswith("hist:"):
+            return
+        if key.startswith("hist:charger:"):
+            slot = int(key.split(":")[2])
+            data = (result or {}).get("response") if isinstance(result, dict) else None
+            if data and data.get("running") and data.get("voltages"):
+                self.charger_curves[slot] = (time.time(), int(data["interval"] or 1),
+                                             [float(v) for v in data["voltages"]])
+            elif data is not None:
+                # Not running any more: keep the last curve for the run that just ended.
+                pass
+            self.charger_curve_ready.emit(slot)
             return
         if key == getattr(self, "_pending_runs", None):
             archived = self.archive.all()
@@ -127,6 +167,7 @@ class HistoryService(QObject):
             return
         if result is not None:
             run.curve = curve_for(run, self.source.charger, parse_history(result))
+            self.apply_charger_curve(run)
             if run.end is not None and any(run.curve.values()):
                 self.archive.save(run)
         if ":curve:" in key:
@@ -266,6 +307,12 @@ class HistoryDialog(QDialog):
 
     def done(self, result: int) -> None:
         _disconnect(self.service, self._runs, self._curve)
+        if hasattr(self, "_timer"):
+            self._timer.stop()
+            try:
+                self.service.charger_curve_ready.disconnect(self._charger_curve)
+            except (RuntimeError, TypeError):
+                pass
         super().done(result)
 
     def reload(self) -> None:
@@ -342,7 +389,11 @@ class CurveDialog(QDialog):
         root.addLayout(row)
         service.runs_ready.connect(self._runs)
         service.curve_ready.connect(self._curve)
+        service.charger_curve_ready.connect(self._charger_curve)
         service.load_runs(days=3)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._refresh_charger_curve)
+        self._timer.start(60_000)
 
     def _runs(self, runs: list[Run], note: str) -> None:
         mine = [r for r in runs if r.slot == self.slot]
@@ -356,12 +407,33 @@ class CurveDialog(QDialog):
     def _curve(self, run: Run) -> None:
         if self.view.run and self.view.run.run_id == run.run_id:
             self.view.show_run(run)
+            if run.end is None:
+                self.service.fetch_charger_curve(self.slot)
+
+    def _refresh_charger_curve(self) -> None:
+        run = self.view.run
+        if run is not None and run.end is None:
+            self.service.fetch_charger_curve(self.slot)
+
+    def _charger_curve(self, slot: int) -> None:
+        run = self.view.run
+        if slot == self.slot and run is not None and run.end is None and run.curve:
+            self.service.apply_charger_curve(run)
+            self.view.show_run(run)
+            self.view.hint.setText("Voltage at 1-second detail from the charger's own memory. "
+                                   "Touch or drag to read values; double-tap to clear.")
 
     def live(self, charger: ChargerEntities, states: dict[str, Any]) -> None:
         self.view.live(self.slot, charger, states)
 
     def done(self, result: int) -> None:
         _disconnect(self.service, self._runs, self._curve)
+        if hasattr(self, "_timer"):
+            self._timer.stop()
+            try:
+                self.service.charger_curve_ready.disconnect(self._charger_curve)
+            except (RuntimeError, TypeError):
+                pass
         super().done(result)
 
     def _history(self) -> None:

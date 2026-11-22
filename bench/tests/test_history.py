@@ -133,3 +133,24 @@ def test_cycle_run_reports_discharged_capacity():
     assert run.discharged == 1950 and run.capacity == 2010
     from mc5000_bench.history_ui import capacity_text
     assert capacity_text(run) == "1950 mAh out"
+
+
+def test_charger_curve_fills_in_voltage(qapp, tmp_path):
+    from mc5000_bench import app as appmod
+    from mc5000_bench.config import Settings, save_settings
+    from mc5000_bench.history_ui import CurveDialog
+
+    ha = FakeHA()
+    # Slot 1 has been charging for 2850 s: give it a 1-second curve.
+    ha.charger_curves["1"] = {"slot": 1, "running": True, "interval": 1,
+                              "voltages": [1.30 + 0.112 * i / 2850 for i in range(2851)]}
+    save_settings(Settings(ha.url, TOKEN))
+    window = appmod.MainWindow()
+    curve = CurveDialog(1, window.history, window)
+    assert wait_for(qapp, lambda: len(curve.view.chart.data.get("voltage", [])) > 2000)
+    assert "1-second" in curve.view.hint.text()
+    assert any(c.get("service") == "get_history" for c in ha.calls)
+    # Current still comes from HA's history.
+    assert 50 < len(curve.view.chart.data["current"]) < 200
+    curve.done(0)
+    window.close()

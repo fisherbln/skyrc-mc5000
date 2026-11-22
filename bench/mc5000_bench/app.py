@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -877,6 +877,11 @@ class MainWindow(QMainWindow):
         self._curve_dialogs: list[CurveDialog] = []
         self._settings_dialog: ChargerSettingsDialog | None = None
         self._swept = False
+        # Keep a recent copy of each running slot's 1-second curve from the
+        # charger, so a run's saved curve has full detail after it ends.
+        self._curve_timer = QTimer(self)
+        self._curve_timer.timeout.connect(self._fetch_charger_curves)
+        self._curve_timer.start(120_000)
         if self.settings.complete:
             self.client.connect_to(self.settings.url, self.settings.token, self.settings.verify_tls)
 
@@ -937,6 +942,13 @@ class MainWindow(QMainWindow):
                 self.status.setText(
                     "Connected to Home Assistant · charger not reachable (off or out of range?)"
                 )
+
+    def _fetch_charger_curves(self) -> None:
+        if not self.online:
+            return
+        for slot, card in self.cards.items():
+            if card.reading.active:
+                self.history.fetch_charger_curve(slot)
 
     def _service_failed(self, message: str) -> None:
         QMessageBox.warning(self, "Home Assistant", message)
