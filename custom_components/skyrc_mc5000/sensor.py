@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -151,6 +152,7 @@ async def async_setup_entry(
         for description in SENSORS
     )
     async_add_entities(Mc5000UsbSensor(coordinator, d) for d in USB_SENSORS)
+    async_add_entities(Mc5000LastResultSensor(coordinator, slot) for slot in SLOTS)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -235,3 +237,47 @@ class Mc5000SlotSensor(Mc5000Entity, SensorEntity):
     def native_value(self):
         channel = self._channel()
         return None if channel is None else self.entity_description.value_fn(channel)
+
+
+RESULT_OPTIONS = ["done", "stopped", *[e for e in ERROR_OPTIONS if e != "none"]]
+
+
+class Mc5000LastResultSensor(Mc5000Entity, RestoreSensor):
+    """How the slot's last run ended, with its final mAh and time as attributes."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = RESULT_OPTIONS
+    _attr_translation_key = "last_result"
+
+    def __init__(self, coordinator, slot: int) -> None:
+        super().__init__(coordinator, f"slot{slot}_last_result")
+        self._slot = slot
+        self._attr_translation_placeholders = {"slot": str(slot)}
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if self._slot in self.coordinator.last_results:
+            return
+        last = await self.async_get_last_state()
+        if last is not None and last.state in RESULT_OPTIONS:
+            self.coordinator.last_results[self._slot] = {
+                "outcome": last.state,
+                **{k: last.attributes.get(k) for k in
+                   ("capacity", "elapsed", "battery_type", "operation", "started", "ended")},
+            }
+
+    @property
+    def available(self) -> bool:
+        return True  # a past result stays true while the charger is offline
+
+    @property
+    def native_value(self) -> str | None:
+        result = self.coordinator.last_results.get(self._slot)
+        return result["outcome"] if result else None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        result = self.coordinator.last_results.get(self._slot)
+        if not result:
+            return None
+        return {k: v for k, v in result.items() if k != "outcome"}

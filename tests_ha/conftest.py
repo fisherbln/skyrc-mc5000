@@ -53,6 +53,7 @@ def mock_charger():
     ))
     charger.get_device_info = AsyncMock(return_value=Mc5000DeviceInfo(
         model_code="100214", firmware="2.02", hardware="2",
+        serial_code="313030323134040000000002020200ce",
     ))
 
     ble_device = BLEDevice(ADDRESS, "#Charger-4036", None)

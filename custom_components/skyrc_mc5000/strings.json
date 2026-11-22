@@ -106,6 +106,45 @@
       },
       "usb_runtime": {
         "name": "USB-C time on"
+      },
+      "last_result": {
+        "name": "Slot {slot} last result",
+        "state": {
+          "done": "Done",
+          "stopped": "Stopped",
+          "input_voltage_low": "Input voltage low",
+          "input_voltage_high": "Input voltage high",
+          "connection_break": "Connection break",
+          "capacity_limit": "Capacity limit reached",
+          "time_limit": "Time limit reached",
+          "internal_temp_high": "Internal temperature high",
+          "calibration_failed": "Calibration failed",
+          "high_resistance": "High internal resistance",
+          "battery_type_error": "Battery type error",
+          "overload": "Overload",
+          "reverse_polarity": "Reverse polarity",
+          "fully_charged": "Fully charged"
+        },
+        "state_attributes": {
+          "capacity": {
+            "name": "Capacity (mAh)"
+          },
+          "elapsed": {
+            "name": "Time (s)"
+          },
+          "battery_type": {
+            "name": "Battery type"
+          },
+          "operation": {
+            "name": "Operation"
+          },
+          "started": {
+            "name": "Started"
+          },
+          "ended": {
+            "name": "Ended"
+          }
+        }
       }
     },
     "button": {
@@ -208,6 +247,11 @@
       },
       "program_capacity": {
         "name": "Slot {slot} program capacity"
+      }
+    },
+    "update": {
+      "firmware": {
+        "name": "Firmware"
       }
     }
   },

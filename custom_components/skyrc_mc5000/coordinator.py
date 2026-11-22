@@ -56,6 +56,9 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         self.usb: Mc5000UsbStatus | None = None
         self.device_info: Mc5000DeviceInfo | None = None
         self._settings_read = 0.0
+        # How each slot's last run ended; restored by the sensors after a restart.
+        self.last_results: dict[int, dict] = {}
+        self._runs: dict[int, dict] = {}
 
     async def _async_connected_charger(self) -> Mc5000:
         """Return a connected charger, connecting through HA Bluetooth if needed."""
@@ -87,6 +90,7 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
                 charger = await self._async_connected_charger()
                 await charger.update()
                 await self._async_read_extras(charger)
+                self._track_runs(charger.state)
                 if not charger.is_connected:
                     # The library swallows errors once the link has dropped;
                     # don't report the previous readings as current.
@@ -117,6 +121,53 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
                         registry.async_update_device(
                             device.id, sw_version=info.firmware, hw_version=info.hardware
                         )
+
+    def _track_runs(self, state: Mc5000State) -> None:
+        """Keep the final numbers of each run.
+
+        The charger zeroes the mAh counter when a run ends in an error, so the
+        last non-zero reading seen during the run is what gets kept.
+        """
+        from homeassistant.util import dt as dt_util
+        from skyrc_ble.models import Mc5000ChannelStatus, Mc5000Error
+
+        active = {Mc5000ChannelStatus.CHARGE, Mc5000ChannelStatus.DISCHARGE,
+                  Mc5000ChannelStatus.REST}
+        done = {Mc5000ChannelStatus.DONE, Mc5000ChannelStatus.DONE_ALT}
+        for slot in SLOTS:
+            ch = state.channels[slot - 1]
+            if ch is None:
+                continue
+            run = self._runs.get(slot)
+            if ch.status in active:
+                if run is None:
+                    run = self._runs[slot] = {"started": dt_util.utcnow().isoformat()}
+                run["battery_type"] = ch.type.name.lower()
+                if ch.operation is not None:
+                    run["operation"] = ch.operation.name.lower()
+                if ch.capacity:
+                    run["capacity"] = ch.capacity
+                if ch.time:
+                    run["elapsed"] = ch.time
+                continue
+            if run is None:
+                continue
+            del self._runs[slot]
+            if ch.error not in (Mc5000Error.NONE,):
+                outcome = ch.error.name.lower().removesuffix("_alt")
+            elif ch.status in done:
+                outcome = "done"
+            else:
+                outcome = "stopped"
+            self.last_results[slot] = {
+                "outcome": outcome,
+                "capacity": ch.capacity or run.get("capacity"),
+                "elapsed": ch.time or run.get("elapsed"),
+                "battery_type": run.get("battery_type"),
+                "operation": run.get("operation"),
+                "started": run["started"],
+                "ended": dt_util.utcnow().isoformat(),
+            }
 
     async def async_set_settings(self, **changes) -> None:
         """Change system settings (read-modify-write) and confirm by reading back."""

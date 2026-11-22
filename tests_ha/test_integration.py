@@ -351,3 +351,53 @@ async def test_usb_sensors_and_firmware(hass: HomeAssistant, mock_charger) -> No
 
     device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, ADDRESS)})
     assert device.sw_version == "2.02" and device.hw_version == "2"
+
+
+UPDATE_URL = "http://upgrade.skyrc.com/"
+SERIAL = "313030323134040000000002020200ce"
+
+
+async def test_firmware_update_available(hass: HomeAssistant, mock_charger, aioclient_mock) -> None:
+    aioclient_mock.get(UPDATE_URL, params={"SN": SERIAL},
+                       json=[{"version": "2.03", "memo": {"en": "Fixes NiZn"}, "force": 0}])
+    await _setup(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("update.skyrc_mc5000_4036_firmware")
+    assert state.attributes["installed_version"] == "2.02"
+    assert state.attributes["latest_version"] == "2.03"
+    assert state.state == "on"
+    assert state.attributes["release_summary"] == "Fixes NiZn"
+    assert aioclient_mock.mock_calls[0][1].query["SN"] == SERIAL
+
+
+async def test_firmware_up_to_date(hass: HomeAssistant, mock_charger, aioclient_mock) -> None:
+    aioclient_mock.get(UPDATE_URL, params={"SN": SERIAL}, json=[])
+    await _setup(hass)
+    await hass.async_block_till_done()
+    state = hass.states.get("update.skyrc_mc5000_4036_firmware")
+    assert state.state == "off" and state.attributes["latest_version"] == "2.02"
+
+
+async def test_last_result_keeps_capacity_after_error(hass: HomeAssistant, mock_charger, aioclient_mock) -> None:
+    from dataclasses import replace
+
+    from skyrc_ble.models import Mc5000ChannelStatus, Mc5000Error, Mc5000Operation
+
+    aioclient_mock.get(UPDATE_URL, params={"SN": SERIAL}, json=[])
+    await _setup(hass)
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    channels = mock_charger.state.channels
+    base = channels[1]
+    channels[1] = replace(base, status=Mc5000ChannelStatus.DISCHARGE,
+                          operation=Mc5000Operation.DISCHARGE, capacity=1160, time=8355,
+                          error=Mc5000Error.NONE)
+    await coordinator.async_refresh()
+    assert hass.states.get("sensor.skyrc_mc5000_4036_slot_2_last_result").state == "unknown"
+    # The cell's protection cuts out: standby, counter zeroed, error reported.
+    channels[1] = replace(channels[1], status=Mc5000ChannelStatus.STANDBY, capacity=0,
+                          time=0, error=Mc5000Error.CONNECTION_BREAK)
+    await coordinator.async_refresh()
+    state = hass.states.get("sensor.skyrc_mc5000_4036_slot_2_last_result")
+    assert state.state == "connection_break"
+    assert state.attributes["capacity"] == 1160 and state.attributes["elapsed"] == 8355
+    assert state.attributes["operation"] == "discharge"

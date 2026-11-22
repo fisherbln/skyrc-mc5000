@@ -10,7 +10,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/fisherbln/skyrc-mc5000/issues",
   "requirements": [
-    "skyrc-ble @ https://github.com/fisherbln/skyrc-ble/archive/4de3a476eac3ade0982c74bcfe22d046de06957f.zip"
+    "skyrc-ble @ https://github.com/fisherbln/skyrc-ble/archive/8b5db971357c9c948bd4a7ee77a61f8bce7e80c7.zip"
   ],
-  "version": "0.3.1"
+  "version": "0.4.0"
 }
