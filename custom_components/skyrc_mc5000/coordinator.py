@@ -110,11 +110,13 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
             if info is not None:
                 self.device_info = info
                 registry = dr.async_get(self.hass)
-                device = registry.async_get_device(identifiers={(DOMAIN, self.address)})
-                if device is not None:
-                    registry.async_update_device(
-                        device.id, sw_version=info.firmware, hw_version=info.hardware
-                    )
+                for device in dr.async_entries_for_config_entry(
+                    registry, self.config_entry.entry_id
+                ):
+                    if (DOMAIN, self.address) in device.identifiers:
+                        registry.async_update_device(
+                            device.id, sw_version=info.firmware, hw_version=info.hardware
+                        )
 
     async def async_set_settings(self, **changes) -> None:
         """Change system settings (read-modify-write) and confirm by reading back."""
