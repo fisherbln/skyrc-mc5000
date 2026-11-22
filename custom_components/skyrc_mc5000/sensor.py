@@ -134,8 +134,8 @@ SENSORS: tuple[Mc5000SensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,
-        value_fn=lambda d: d.temperature,
+        # An empty slot reports 0 °C: treat that as no reading.
+        value_fn=lambda d: d.temperature or None,
     ),
 )
 
