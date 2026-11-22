@@ -158,8 +158,11 @@ the hex of bytes 4–19 (character 27) = `2`.
 `0f LEN 98 <mask> <pages> <page> <interval> <v0 lo> <v0 hi> <v1 lo> <v1 hi> … SUM`
 
 One request streams every page back to back (page 1..pages), each up to 100 samples.
-Samples are millivolts, little-endian; `interval` is seconds per sample (1 for a run
-under 4 minutes; whether it grows on long runs is not yet known). Example, 228 s into
+Samples are millivolts, little-endian; `interval` is seconds per sample. The charger
+keeps the whole run in about 300 samples: as the run grows it doubles the interval
+(observed 1 s at 4 min, 4 s at 17 min, 8 s at 32 min, each covering the full run from
+its start), so long runs come back at coarser resolution rather than truncated. The
+voltage itself is re-measured roughly every 20 s. Example, 228 s into
 an Eneloop charge at 0.5 A: pages 3 (100 + 100 + 26 samples), starting at 1.409 V and
 dipping to 1.343 V before rising.
 
