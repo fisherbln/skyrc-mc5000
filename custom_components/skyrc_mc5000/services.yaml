@@ -99,3 +99,15 @@ send_command:
     payload:
       selector:
         text:
+
+get_history:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: skyrc_mc5000
+    slot:
+      required: true
+      selector:
+        select:
+          options: ["1", "2", "3", "4"]

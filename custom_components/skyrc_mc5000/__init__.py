@@ -29,6 +29,14 @@ type Mc5000ConfigEntry = ConfigEntry[Mc5000Coordinator]
 
 SERVICE_START_PROGRAM = "start_program"
 SERVICE_SEND_COMMAND = "send_command"
+SERVICE_GET_HISTORY = "get_history"
+
+GET_HISTORY_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("slot"): vol.In(["1", "2", "3", "4"]),
+    }
+)
 
 # Commands send_command refuses: firmware update (0x60-0x62), factory reset
 # (0x97) and changing the Bluetooth password (0x56). Those stay in the SkyRC app.
@@ -152,6 +160,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.services.async_register(
         DOMAIN, SERVICE_SEND_COMMAND, async_send_command, schema=SEND_COMMAND_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def async_get_history(call: ServiceCall) -> ServiceResponse:
+        coordinator = _coordinator_for_call(hass, call)
+        slot = int(call.data["slot"])
+        history = await coordinator.async_get_history(slot)
+        if history is None:
+            return {"slot": slot, "running": False, "interval": None, "voltages": []}
+        return {
+            "slot": slot,
+            "running": True,
+            "interval": history.interval,
+            "voltages": list(history.voltages),
+        }
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_GET_HISTORY, async_get_history, schema=GET_HISTORY_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     return True

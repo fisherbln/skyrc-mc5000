@@ -206,6 +206,16 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         """Stop the channels in the bitmask (0 = all)."""
         await self._async_command(lambda c: c.stop_charge_multi(channels))
 
+    async def async_get_history(self, slot: int):
+        """The voltage curve the charger keeps for a running slot (None if idle)."""
+        result: list = []
+
+        async def go(charger: Mc5000) -> None:
+            result.append(await charger.get_history(slot - 1))
+
+        await self._async_command(go)
+        return result[0] if result else None
+
     async def async_send_raw(self, command: int, payload: bytes) -> bytes | None:
         """Send one raw frame and return the charger's reply (None on timeout).
 

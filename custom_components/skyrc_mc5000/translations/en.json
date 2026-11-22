@@ -391,6 +391,20 @@
           "description": "Hex bytes, e.g. '04'."
         }
       }
+    },
+    "get_history": {
+      "name": "Get stored curve",
+      "description": "Download the voltage curve the charger keeps for a running slot (one sample per second). Returns an empty list when the slot isn't running.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Charger",
+          "description": "Only needed when more than one MC5000 is set up."
+        },
+        "slot": {
+          "name": "Slot",
+          "description": "Slot 1-4."
+        }
+      }
     }
   }
 }

@@ -401,3 +401,21 @@ async def test_last_result_keeps_capacity_after_error(hass: HomeAssistant, mock_
     assert state.state == "connection_break"
     assert state.attributes["capacity"] == 1160 and state.attributes["elapsed"] == 8355
     assert state.attributes["operation"] == "discharge"
+
+
+async def test_get_history(hass: HomeAssistant, mock_charger, aioclient_mock) -> None:
+    from skyrc_ble import Mc5000History
+
+    aioclient_mock.get(UPDATE_URL, params={"SN": SERIAL}, json=[])
+    await _setup(hass)
+    mock_charger.get_history = AsyncMock(return_value=Mc5000History(0, 1, (1.409, 1.343)))
+    reply = await hass.services.async_call(
+        DOMAIN, "get_history", {"slot": "1"}, blocking=True, return_response=True
+    )
+    mock_charger.get_history.assert_awaited_with(0)
+    assert reply == {"slot": 1, "running": True, "interval": 1, "voltages": [1.409, 1.343]}
+    mock_charger.get_history = AsyncMock(return_value=None)
+    reply = await hass.services.async_call(
+        DOMAIN, "get_history", {"slot": "3"}, blocking=True, return_response=True
+    )
+    assert reply["running"] is False and reply["voltages"] == []
