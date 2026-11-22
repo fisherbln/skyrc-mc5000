@@ -167,7 +167,7 @@ class FakeHA:
         self.history = sample_history(_time.time())
         self.calls: list[dict[str, Any]] = []
         self.fail_services = False
-        # skyrc_mc5000.get_history replies by slot (missing = not running)
+        # skyrc_mc5000.get_history replies by slot (missing = no curve)
         self.charger_curves: dict[str, dict] = {}
         self._loop = asyncio.new_event_loop()
         self._clients: list[tuple[Any, int]] = []
@@ -223,7 +223,7 @@ class FakeHA:
                 elif msg.get("service") == "get_history":
                     slot = msg["service_data"]["slot"]
                     reply = self.charger_curves.get(slot) or {
-                        "slot": int(slot), "running": False, "interval": None, "voltages": []}
+                        "slot": int(slot), "available": False, "interval": None, "voltages": []}
                     await ws.send(json.dumps({"id": mid, "type": "result", "success": True,
                                               "result": {"context": {}, "response": reply}}))
                 else:

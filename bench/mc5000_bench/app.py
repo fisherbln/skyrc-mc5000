@@ -877,8 +877,8 @@ class MainWindow(QMainWindow):
         self._curve_dialogs: list[CurveDialog] = []
         self._settings_dialog: ChargerSettingsDialog | None = None
         self._swept = False
-        # Keep a recent copy of each running slot's 1-second curve from the
-        # charger, so a run's saved curve has full detail after it ends.
+        # Keep a recent copy of each running slot's curve from the charger, and
+        # fetch it once more after the run ends, so the saved run has the detail.
         self._curve_timer = QTimer(self)
         self._curve_timer.timeout.connect(self._fetch_charger_curves)
         self._curve_timer.start(120_000)
@@ -946,9 +946,13 @@ class MainWindow(QMainWindow):
     def _fetch_charger_curves(self) -> None:
         if not self.online:
             return
-        for slot, card in self.cards.items():
-            if card.reading.active:
-                self.history.fetch_charger_curve(slot)
+        was = getattr(self, "_curve_slots", set())
+        now = {slot for slot, card in self.cards.items() if card.reading.active}
+        # Slots still running, plus ones that finished since the last tick: the
+        # charger keeps a finished run's curve until the next run starts.
+        for slot in sorted(now | was):
+            self.history.fetch_charger_curve(slot)
+        self._curve_slots = now
 
     def _service_failed(self, message: str) -> None:
         QMessageBox.warning(self, "Home Assistant", message)

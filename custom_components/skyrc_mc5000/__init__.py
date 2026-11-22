@@ -168,10 +168,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         slot = int(call.data["slot"])
         history = await coordinator.async_get_history(slot)
         if history is None:
-            return {"slot": slot, "running": False, "interval": None, "voltages": []}
+            return {"slot": slot, "available": False, "interval": None, "voltages": []}
         return {
             "slot": slot,
-            "running": True,
+            "available": True,
             "interval": history.interval,
             "voltages": list(history.voltages),
         }

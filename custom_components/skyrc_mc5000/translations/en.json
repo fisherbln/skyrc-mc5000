@@ -394,7 +394,7 @@
     },
     "get_history": {
       "name": "Get stored curve",
-      "description": "Download the voltage curve the charger keeps for a running slot (one sample per second). Returns an empty list when the slot isn't running.",
+      "description": "Download the voltage curve the charger keeps for a slot's current run, or its last run once it finished. The charger thins the samples as a run grows (about 300 samples cover the whole run), so interval is seconds per sample. Returns available false and an empty list for an empty slot or a run stopped by hand.",
       "fields": {
         "config_entry_id": {
           "name": "Charger",

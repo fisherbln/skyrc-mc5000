@@ -58,7 +58,7 @@ Bitmask: slot 1 = `0x01`, slot 2 = `0x02`, slot 3 = `0x04`, slot 4 = `0x08`.
 | `0x9B` | USB-C PD port status | `[0x00]` | USB-C frame (below) |
 | `0x57` | device info | 17 bytes: `00` + MAC byte-reversed + zeros | info frame (below) |
 | `0x93` | query slot program: **not supported** (no reply, idle or running) | `[mask]` | – |
-| `0x98` | stored voltage curve of a running slot | `[mask]` | 1+ pages (below) |
+| `0x98` | stored voltage curve of a slot's current or last finished run | `[mask]` | 1+ pages (below) |
 
 Examples: status slot 1 `0f 03 91 01 92`; stop all `0f 03 fe 00 fe`;
 stop slot 3 `0f 03 fe 04 02`.
@@ -160,12 +160,16 @@ the hex of bytes 4–19 (character 27) = `2`.
 One request streams every page back to back (page 1..pages), each up to 100 samples.
 Samples are millivolts, little-endian; `interval` is seconds per sample. The charger
 keeps the whole run in about 300 samples: as the run grows it doubles the interval
-(observed 1 s at 4 min, 4 s at 17 min, 8 s at 32 min, each covering the full run from
-its start), so long runs come back at coarser resolution rather than truncated. The
+(observed 1 s at 4 min, 4 s at 17 min, 8 s at 32 min, 16 s at 66 min, each covering
+the full run from its start), so long runs come back at coarser resolution rather than
+truncated. The
 voltage itself is re-measured roughly every 20 s. Example, 228 s into
 an Eneloop charge at 0.5 A: pages 3 (100 + 100 + 26 samples), starting at 1.409 V and
 dipping to 1.343 V before rising.
 
-The charger only answers for a slot that is running: no reply for an empty or idle
-slot, and none once the run was stopped. `0x93` (the NC-series "read program")
+The curve stays readable after a run finishes on its own, frozen at the run's
+length: 17 minutes after a 66-minute Eneloop charge ended (`done`, 481 mAh), the reply
+was still pages 3 (100 + 100 + 47 samples) at 16 s, i.e. 247 samples covering the run
+from start to finish, last sample 1.533 V. There is no reply for an empty slot, a slot
+that hasn't run, or once a run was stopped by hand. `0x93` (the NC-series "read program")
 got no reply on the MC5000 at all.

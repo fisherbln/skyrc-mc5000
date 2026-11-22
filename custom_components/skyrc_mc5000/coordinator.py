@@ -207,7 +207,10 @@ class Mc5000Coordinator(DataUpdateCoordinator[Mc5000State]):
         await self._async_command(lambda c: c.stop_charge_multi(channels))
 
     async def async_get_history(self, slot: int):
-        """The voltage curve the charger keeps for a running slot (None if idle)."""
+        """The voltage curve the charger keeps for a slot's current or last finished run.
+
+        None when the charger doesn't answer: empty slot, never run, or stopped by hand.
+        """
         result: list = []
 
         async def go(charger: Mc5000) -> None:

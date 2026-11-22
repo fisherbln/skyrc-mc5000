@@ -142,15 +142,68 @@ def test_charger_curve_fills_in_voltage(qapp, tmp_path):
 
     ha = FakeHA()
     # Slot 1 has been charging for 2850 s: give it a 1-second curve.
-    ha.charger_curves["1"] = {"slot": 1, "running": True, "interval": 1,
+    ha.charger_curves["1"] = {"slot": 1, "available": True, "interval": 1,
                               "voltages": [1.30 + 0.112 * i / 2850 for i in range(2851)]}
     save_settings(Settings(ha.url, TOKEN))
     window = appmod.MainWindow()
     curve = CurveDialog(1, window.history, window)
     assert wait_for(qapp, lambda: len(curve.view.chart.data.get("voltage", [])) > 2000)
-    assert "1-second" in curve.view.hint.text()
+    assert "every second" in curve.view.hint.text()
     assert any(c.get("service") == "get_history" for c in ha.calls)
     # Current still comes from HA's history.
     assert 50 < len(curve.view.chart.data["current"]) < 200
     curve.done(0)
     window.close()
+
+
+def test_charger_curve_fetched_after_finish_ends_at_run_end():
+    """A finished run's curve stops growing, so it lines up with the run's end."""
+    from types import SimpleNamespace
+
+    from mc5000_bench.history_ui import HistoryService
+
+    # Like the Eneloop test: a 3936 s charge at 16 s per sample, read 17 min after it ended.
+    start, end = 10_000.0, 13_936.0
+    volts = [1.38 + 0.15 * i / 246 for i in range(247)]
+    fake = SimpleNamespace(charger_curves={1: (end + 1020, 16, volts)})
+    run = Run(1, start, end, curve={"voltage": [(start + 5, 1.30), (end, 1.52)]})
+    HistoryService.apply_charger_curve(fake, run)
+    points = run.curve["voltage"]
+    assert len(points) == 247
+    assert points[0] == (start, 1.38)
+    assert points[-1][0] == end
+    # The same copy taken mid-run (fetched before the end) still anchors at the fetch.
+    run2 = Run(1, start, None, curve={"voltage": []})
+    fake.charger_curves[1] = (start + 2000, 8, volts[:251])
+    HistoryService.apply_charger_curve(fake, run2)
+    assert run2.curve["voltage"][-1][0] == start + 2000
+
+
+def test_curve_fetched_once_more_after_a_run_ends(qapp, tmp_path):
+    from mc5000_bench import app as appmod
+    from mc5000_bench.config import Settings, save_settings
+
+    ha = FakeHA()
+    save_settings(Settings(ha.url, TOKEN))
+    window = appmod.MainWindow()
+    assert wait_for(qapp, lambda: window.online)
+    active = {s for s, c in window.cards.items() if c.reading.active}
+    assert active
+    fetched: list[int] = []
+    window.history.fetch_charger_curve = fetched.append
+    window._fetch_charger_curves()
+    assert fetched == sorted(active)
+    # Every slot goes idle: each one that was running gets one last fetch, then none.
+    for card in window.cards.values():
+        card.reading = SimpleReading()
+    fetched.clear()
+    window._fetch_charger_curves()
+    assert fetched == sorted(active)
+    fetched.clear()
+    window._fetch_charger_curves()
+    assert fetched == []
+    window.close()
+
+
+class SimpleReading:
+    active = False

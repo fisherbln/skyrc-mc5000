@@ -27,8 +27,8 @@ Assistant's WebSocket API, so you can use it alongside the dashboard.
   temperature, if that sensor is enabled in Home Assistant) for the current or
   latest run, updating live. Touch or drag to read values at any moment. With
   integration 0.5.0+, a running slot's voltage comes from the charger's own memory
-  at one sample per second (HA polls every 10 s), and that detail is kept in the
-  saved run.
+  (one sample a second early on, thinning to about every 16 s by the end of an
+  hour-long run; HA polls every 10 s), and that detail is kept in the saved run.
 - **History:** every run from Home Assistant's recorded history, even ones that
   ran while the app was closed, with its result (Done, Stopped or the charger's
   error), final mAh and time, and its curve. The charger zeroes its mAh counter

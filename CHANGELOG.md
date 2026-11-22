@@ -3,6 +3,17 @@
 Releases of the `skyrc_mc5000` integration. A release is published automatically when
 the version in `custom_components/skyrc_mc5000/manifest.json` changes on main.
 
+## v0.5.1
+
+**Integration**
+- `get_history` now also returns the curve of a slot's last run after it finishes on its own (the charger keeps it until the next run starts). The response field `running` is renamed `available`, since a finished run has a curve too.
+- Clearer description of the curve's resolution: about 300 samples per run, so the interval grows from 1 s to 16 s over an hour-long charge.
+
+**MC5000 Bench 0.5.1**
+- Fetches a slot's curve once more after a run ends, so the saved run keeps the charger's detail to the very end, lined up with the run's end time.
+- The curve hint says how often the charger sampled ("every 16 s") instead of claiming one sample a second.
+- Accepts both `available` (integration 0.5.1) and `running` (0.5.0).
+
 ## v0.5.0
 
 First tagged release. From now on Home Assistant's Marketplace (HACS) only offers an update when a new release is published, not on every commit.

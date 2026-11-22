@@ -413,9 +413,9 @@ async def test_get_history(hass: HomeAssistant, mock_charger, aioclient_mock) ->
         DOMAIN, "get_history", {"slot": "1"}, blocking=True, return_response=True
     )
     mock_charger.get_history.assert_awaited_with(0)
-    assert reply == {"slot": 1, "running": True, "interval": 1, "voltages": [1.409, 1.343]}
+    assert reply == {"slot": 1, "available": True, "interval": 1, "voltages": [1.409, 1.343]}
     mock_charger.get_history = AsyncMock(return_value=None)
     reply = await hass.services.async_call(
         DOMAIN, "get_history", {"slot": "3"}, blocking=True, return_response=True
     )
-    assert reply["running"] is False and reply["voltages"] == []
+    assert reply["available"] is False and reply["voltages"] == []

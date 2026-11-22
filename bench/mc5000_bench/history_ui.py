@@ -59,8 +59,9 @@ class HistoryService(QObject):
         self._queue: list[Run] = []
         self._archiving: str | None = None
         self._next = 0
-        # slot -> (fetched_at, interval_s, volts): the charger's own 1-second curve
-        # for a running slot, fetched now and then while the run lasts.
+        # slot -> (fetched_at, interval_s, volts): the curve the charger keeps for
+        # a slot's current run (1 s early on, coarser as the run grows), fetched now
+        # and then while the run lasts and once more after it finishes.
         self.charger_curves: dict[int, tuple[float, int, list[float]]] = {}
         client.response.connect(self._response)
 
@@ -96,28 +97,31 @@ class HistoryService(QObject):
         self._request_curve(run, "curve")
 
     def fetch_charger_curve(self, slot: int) -> None:
-        """Ask HA for the charger's stored curve of a running slot (integration 0.5+)."""
+        """Ask HA for the charger's stored curve of a slot's current or last run (integration 0.5+)."""
         self.client.request(self._key(f"charger:{slot}"), {
             "type": "call_service", "domain": "skyrc_mc5000", "service": "get_history",
             "service_data": {"slot": str(slot)}, "return_response": True,
         }, timeout=30)
 
     def apply_charger_curve(self, run: Run) -> None:
-        """Use the charger's 1-second voltage samples for the part of the run they cover."""
+        """Use the charger's voltage samples for the part of the run they cover."""
         got = self.charger_curves.get(run.slot)
         if not got:
             return
         fetched, interval, volts = got
         if not volts or not interval:
             return
-        first = fetched - (len(volts) - 1) * interval
+        # The curve stops growing when a run finishes, so a copy fetched after the
+        # end has its last sample at the end, not at the moment it was fetched.
+        last = min(fetched, run.end) if run.end is not None else fetched
+        first = last - (len(volts) - 1) * interval
         end = run.end if run.end is not None else fetched
-        if first < run.start - 120 or fetched < run.start:
+        if first < run.start - 120 - interval or last < run.start:
             return  # those samples belong to another run
         points = [(first + i * interval, v) for i, v in enumerate(volts)]
         points = [p for p in points if run.start - 120 <= p[0] <= end + 1]
         older = [p for p in run.curve.get("voltage", []) if p[0] < first]
-        newer = [p for p in run.curve.get("voltage", []) if p[0] > fetched]
+        newer = [p for p in run.curve.get("voltage", []) if p[0] > last]
         run.curve["voltage"] = older + points + newer
 
     def _request_curve(self, run: Run, kind: str) -> None:
@@ -137,12 +141,11 @@ class HistoryService(QObject):
         if key.startswith("hist:charger:"):
             slot = int(key.split(":")[2])
             data = (result or {}).get("response") if isinstance(result, dict) else None
-            if data and data.get("running") and data.get("voltages"):
+            # "available" from integration 0.5.1 on, "running" in 0.5.0.
+            if data and data.get("available", data.get("running")) and data.get("voltages"):
                 self.charger_curves[slot] = (time.time(), int(data["interval"] or 1),
                                              [float(v) for v in data["voltages"]])
-            elif data is not None:
-                # Not running any more: keep the last curve for the run that just ended.
-                pass
+            # No curve (slot emptied, run stopped by hand): keep the last copy.
             self.charger_curve_ready.emit(slot)
             return
         if key == getattr(self, "_pending_runs", None):
@@ -420,7 +423,9 @@ class CurveDialog(QDialog):
         if slot == self.slot and run is not None and run.end is None and run.curve:
             self.service.apply_charger_curve(run)
             self.view.show_run(run)
-            self.view.hint.setText("Voltage at 1-second detail from the charger's own memory. "
+            got = self.service.charger_curves.get(slot)
+            every = f"every {got[1]} s" if got and got[1] > 1 else "every second"
+            self.view.hint.setText(f"Voltage {every} from the charger's own memory. "
                                    "Touch or drag to read values; double-tap to clear.")
 
     def live(self, charger: ChargerEntities, states: dict[str, Any]) -> None:
