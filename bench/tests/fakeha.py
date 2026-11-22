@@ -16,6 +16,16 @@ SENSOR_KEYS = ["status", "voltage", "current", "capacity", "elapsed", "resistanc
                "operation", "chemistry", "error"]
 
 
+SETTING_ENTITIES = {
+    "backlight": "select.skyrc_mc5000_4036_lcd_backlight",
+    "screen_timeout": "select.skyrc_mc5000_4036_screen_timeout",
+    "keypress_beep": "select.skyrc_mc5000_4036_keypress_beep",
+    "notify_beep": "select.skyrc_mc5000_4036_notify_beep",
+    "completion_tone": "select.skyrc_mc5000_4036_completion_tone",
+}
+BEEPS = ["off", "low", "medium", "high"]
+
+
 def registry() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for slot in (1, 2, 3, 4):
@@ -35,6 +45,13 @@ def registry() -> list[dict[str, Any]]:
     out.append({"entity_id": "switch.skyrc_mc5000_4036_connection",
                 "platform": "skyrc_mc5000", "unique_id": f"{ADDR}_connection",
                 "config_entry_id": ENTRY})
+    for key, eid in SETTING_ENTITIES.items():
+        out.append({"entity_id": eid, "platform": "skyrc_mc5000",
+                    "unique_id": f"{ADDR}_setting_{key}", "config_entry_id": ENTRY})
+    for key in ("voltage", "current", "power", "energy", "runtime"):
+        out.append({"entity_id": f"sensor.skyrc_mc5000_4036_usb_c_{key}",
+                    "platform": "skyrc_mc5000", "unique_id": f"{ADDR}_usb_{key}",
+                    "config_entry_id": ENTRY})
     out.append({"entity_id": "light.kitchen", "platform": "hue", "unique_id": "x",
                 "config_entry_id": "other"})
     return out
@@ -65,6 +82,18 @@ def sample_states() -> dict[str, dict[str, Any]]:
     states.update(slot_states(4, status="standby", voltage=0.0, current=0.0, capacity=0,
                               elapsed=0, operation="charge", chemistry="nimh", error="none"))
     states["switch.skyrc_mc5000_4036_connection"] = {"s": "on", "a": {}}
+    for key, (value, options) in {
+        "backlight": ("high", ["low", "medium", "high"]),
+        "screen_timeout": ("off", ["off", "1_min", "3_min", "5_min", "10_min", "15_min",
+                                   "30_min", "60_min", "120_min"]),
+        "keypress_beep": ("off", BEEPS),
+        "notify_beep": ("low", BEEPS),
+        "completion_tone": ("once", ["once", "repeat"]),
+    }.items():
+        states[SETTING_ENTITIES[key]] = {"s": value, "a": {"options": options}}
+    for key, value in {"voltage": 15.264, "current": 2.17, "power": 33.12,
+                       "energy": 0.23, "runtime": 47}.items():
+        states[f"sensor.skyrc_mc5000_4036_usb_c_{key}"] = {"s": str(value), "a": {}}
     states["button.skyrc_mc5000_4036_stop_all_slots"] = {"s": "unknown", "a": {}}
     return states
 

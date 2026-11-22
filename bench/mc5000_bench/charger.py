@@ -9,7 +9,9 @@ PLATFORM = "skyrc_mc5000"
 SLOTS = (1, 2, 3, 4)
 
 # The integration builds unique IDs as "<bluetooth address>_<key>".
-_KEY = re.compile(r"_(slot([1-4])_([a-z_]+)|stop_all|connection)$")
+_KEY = re.compile(
+    r"_(slot([1-4])_([a-z_]+)|stop_all|connection|setting_([a-z_]+)|usb_([a-z_]+))$"
+)
 
 UNAVAILABLE = {"unavailable", "unknown", None, ""}
 
@@ -23,11 +25,17 @@ class ChargerEntities:
     stop_all: str | None = None
     # slot -> key ("status", "voltage", "stop", ...) -> entity_id
     slots: dict[int, dict[str, str]] = field(default_factory=dict)
+    # Charger system settings (integration 0.3.0+): key -> select entity_id
+    settings: dict[str, str] = field(default_factory=dict)
+    # USB-C port sensors: "voltage", "current", "power", "energy", "runtime"
+    usb: dict[str, str] = field(default_factory=dict)
 
     def all_ids(self) -> list[str]:
         ids = [e for e in (self.connection, self.stop_all) if e]
         for keys in self.slots.values():
             ids.extend(keys.values())
+        ids.extend(self.settings.values())
+        ids.extend(self.usb.values())
         return sorted(ids)
 
     @property
@@ -53,6 +61,10 @@ def find_charger(registry: list[dict[str, Any]]) -> ChargerEntities:
             charger.stop_all = ent["entity_id"]
         elif m.group(1) == "connection":
             charger.connection = ent["entity_id"]
+        elif m.group(4):
+            charger.settings[m.group(4)] = ent["entity_id"]
+        elif m.group(5):
+            charger.usb[m.group(5)] = ent["entity_id"]
         else:
             slot, key = int(m.group(2)), m.group(3)
             charger.slots.setdefault(slot, {})[key] = ent["entity_id"]
@@ -192,3 +204,27 @@ class RunTracker:
         result = RunResult(now_iso, outcome, capacity, elapsed, last.chemistry, last.operation)
         self.results[slot] = result
         return result
+
+
+@dataclass
+class UsbReading:
+    voltage: float | None = None
+    current: float | None = None
+    power: float | None = None
+    energy: float | None = None
+
+    @property
+    def active(self) -> bool:
+        return bool(self.power)
+
+
+def read_usb(charger: ChargerEntities, states: dict[str, dict[str, Any]]) -> UsbReading | None:
+    if not charger.usb:
+        return None
+
+    def st(key: str) -> dict[str, Any] | None:
+        eid = charger.usb.get(key)
+        return states.get(eid) if eid else None
+
+    return UsbReading(_num(st("voltage")), _num(st("current")), _num(st("power")),
+                      _num(st("energy")))

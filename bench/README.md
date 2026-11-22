@@ -33,6 +33,11 @@ Assistant's WebSocket API, so you can use it alongside the dashboard.
 - Finished runs are copied to `~/.local/share/mc5000-bench/runs/`, so they stay
   after Home Assistant purges old history (10 days by default). Open the app at
   least once within that window to keep every run.
+- **Charger** button: the charger's own settings (screen backlight, screen timeout,
+  keypress beep, alert beep, completion tone), changed through Home Assistant
+  (integration 0.3.0+).
+- A USB-C readout in the header (power, voltage, current) while the charger's
+  USB-C port is powering something.
 - Stop per slot, Stop all, and a banner with a Reconnect button when Home
   Assistant's charger connection is paused for the SkyRC app.
 

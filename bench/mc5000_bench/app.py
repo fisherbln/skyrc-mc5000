@@ -39,6 +39,7 @@ from . import __version__
 from . import chemistry as chem
 from .charger import (
     SLOTS,
+    read_usb,
     ChargerEntities,
     RunResult,
     RunTracker,
@@ -697,6 +698,91 @@ class SettingsDialog(QDialog):
         return Settings(self.url.text().strip(), self.token.text().strip(), self.verify.isChecked())
 
 
+SETTING_LABELS = [
+    ("backlight", "Screen backlight"),
+    ("screen_timeout", "Screen timeout"),
+    ("keypress_beep", "Keypress beep"),
+    ("notify_beep", "Alert beep (errors and completion)"),
+    ("completion_tone", "Completion tone"),
+]
+OPTION_LABELS = {"off": "Off", "low": "Low", "medium": "Medium", "high": "High",
+                 "once": "Once", "repeat": "Repeat every 30 min"}
+
+
+def option_label(option: str) -> str:
+    if option.endswith("_min"):
+        return option.replace("_min", " min")
+    return OPTION_LABELS.get(option, option.replace("_", " ").capitalize())
+
+
+class ChargerSettingsDialog(QDialog):
+    """The charger's own system settings, changed through Home Assistant."""
+
+    def __init__(self, main: "MainWindow") -> None:
+        super().__init__(main)
+        self.main = weakref.proxy(main)
+        self.setWindowTitle("Charger settings")
+        self.resize(900, 520)
+        layout = QVBoxLayout(self)
+        intro = QLabel("These are the charger's own settings (the same as its System "
+                       "Settings menu). Changes apply right away.")
+        intro.setObjectName("muted")
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        form = QFormLayout()
+        self.combos: dict[str, QComboBox] = {}
+        for key, label in SETTING_LABELS:
+            combo = QComboBox()
+            combo.setProperty("setting", key)
+            combo.activated.connect(self._chosen)
+            self.combos[key] = combo
+            form.addRow(label, combo)
+        layout.addLayout(form)
+        self.note = QLabel("")
+        self.note.setObjectName("muted")
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
+        layout.addStretch()
+        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close.rejected.connect(self.reject)
+        layout.addWidget(close)
+        self.refresh(main.states)
+
+    def refresh(self, states: dict[str, Any]) -> None:
+        settings = self.main.charger.settings
+        if not settings:
+            self.note.setText("Your Home Assistant integration doesn't have the charger "
+                              "settings yet: update skyrc_mc5000 to 0.3.0 or later.")
+        missing = False
+        for key, combo in self.combos.items():
+            state = states.get(settings.get(key, ""), {})
+            options = list(state.get("attributes", {}).get("options") or [])
+            current = state.get("state")
+            combo.blockSignals(True)
+            if [combo.itemData(i) for i in range(combo.count())] != options:
+                combo.clear()
+                for option in options:
+                    combo.addItem(option_label(option), option)
+            idx = combo.findData(current)
+            combo.setCurrentIndex(idx)
+            combo.setEnabled(bool(self.main.online and idx >= 0))
+            combo.blockSignals(False)
+            missing = missing or idx < 0
+        if settings and missing:
+            self.note.setText("Some settings aren't available: the charger may be off or "
+                              "out of range.")
+        elif settings:
+            self.note.setText("")
+
+    def _chosen(self, index: int) -> None:
+        combo = self.sender()
+        key = combo.property("setting")
+        eid = self.main.charger.settings.get(key)
+        if eid:
+            self.main.client.call_service("select", "select_option",
+                                          {"option": combo.itemData(index)}, entity_id=eid)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, client: HaClient | None = None) -> None:
         super().__init__()
@@ -726,6 +812,10 @@ class MainWindow(QMainWindow):
         self.dot = QLabel("●")
         self.status = QLabel("Not connected")
         self.status.setObjectName("muted")
+        self.usb_label = QLabel("")
+        self.usb_label.setObjectName("muted")
+        charger_btn = QPushButton("Charger")
+        charger_btn.clicked.connect(self.show_charger_settings)
         history_btn = QPushButton("History")
         history_btn.clicked.connect(self.show_history)
         presets_btn = QPushButton("Presets")
@@ -739,8 +829,11 @@ class MainWindow(QMainWindow):
         header.addSpacing(12)
         header.addWidget(self.dot)
         header.addWidget(self.status, 1)
+        header.addWidget(self.usb_label)
+        header.addSpacing(12)
         header.addWidget(history_btn)
         header.addWidget(presets_btn)
+        header.addWidget(charger_btn)
         header.addWidget(settings_btn)
         header.addWidget(self.stop_all)
         root.addLayout(header)
@@ -782,6 +875,7 @@ class MainWindow(QMainWindow):
         # Weak link back to the window (see SlotCard) so no Qt reference cycle forms.
         self.history = HistoryService(self.client, weakref.proxy(self))
         self._curve_dialogs: list[CurveDialog] = []
+        self._settings_dialog: ChargerSettingsDialog | None = None
         self._swept = False
         if self.settings.complete:
             self.client.connect_to(self.settings.url, self.settings.token, self.settings.verify_tls)
@@ -824,6 +918,15 @@ class MainWindow(QMainWindow):
             self.history.load_runs(days=2)
         for dialog in list(self._curve_dialogs):
             dialog.live(self.charger, states)
+        if self._settings_dialog is not None:
+            self._settings_dialog.refresh(states)
+        usb = read_usb(self.charger, states)
+        if usb is not None and usb.active:
+            self.usb_label.setText(
+                f"USB-C {usb.power:.1f} W · {usb.voltage or 0:.2f} V · {usb.current or 0:.2f} A"
+            )
+        else:
+            self.usb_label.setText("USB-C idle" if usb is not None else "")
         conn = states.get(self.charger.connection or "", {})
         paused = conn.get("state") == "off"
         self.banner_box.setVisible(paused)
@@ -870,6 +973,14 @@ class MainWindow(QMainWindow):
 
     def show_history(self) -> None:
         HistoryDialog(self.history, self).exec()
+
+    def show_charger_settings(self) -> None:
+        dialog = ChargerSettingsDialog(self)
+        self._settings_dialog = dialog
+        try:
+            dialog.exec()
+        finally:
+            self._settings_dialog = None
 
     def show_curve(self, slot: int) -> None:
         dialog = CurveDialog(slot, self.history, self)

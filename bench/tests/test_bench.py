@@ -310,3 +310,39 @@ def test_preset_dialog_advanced(qapp, tmp_path):
     dialog.battery.setCurrentIndex(dialog.battery.findData("lifepo4"))
     assert dialog.items[2].charge_voltage is None
     assert dialog.items[2].restart_voltage == 0
+
+
+def test_charger_settings_and_usb(qapp, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    from mc5000_bench import app as appmod
+    from mc5000_bench.config import Settings, save_settings
+
+    charger = find_charger(registry())
+    assert charger.settings["backlight"] == "select.skyrc_mc5000_4036_lcd_backlight"
+    assert charger.usb["power"] == "sensor.skyrc_mc5000_4036_usb_c_power"
+    assert "sensor.skyrc_mc5000_4036_usb_c_power" in charger.all_ids()
+
+    ha = FakeHA()
+    save_settings(Settings(ha.url, TOKEN))
+    window = appmod.MainWindow()
+    assert wait_for(qapp, lambda: "33.1 W" in window.usb_label.text())
+    dialog = appmod.ChargerSettingsDialog(window)
+    window._settings_dialog = dialog
+    combo = dialog.combos["backlight"]
+    assert combo.currentData() == "high" and combo.isEnabled()
+    assert dialog.combos["screen_timeout"].itemText(1) == "1 min"
+    assert dialog.combos["completion_tone"].currentText() == "Once"
+    # Picking an option asks HA to change the select.
+    combo.activated.emit(combo.findData("medium"))
+    assert wait_for(qapp, lambda: len(ha.calls) == 1)
+    assert ha.calls[0]["domain"] == "select" and ha.calls[0]["service_data"] == {"option": "medium"}
+    assert ha.calls[0]["target"] == {"entity_id": "select.skyrc_mc5000_4036_lcd_backlight"}
+    # HA reports the change back; the dialog follows it.
+    ha.push({"select.skyrc_mc5000_4036_lcd_backlight": "medium"})
+    assert wait_for(qapp, lambda: combo.currentData() == "medium")
+    ha.push({"sensor.skyrc_mc5000_4036_usb_c_power": "0.0"})
+    assert wait_for(qapp, lambda: window.usb_label.text() == "USB-C idle")
+    window._settings_dialog = None
+    dialog.done(0)
+    window.close()
