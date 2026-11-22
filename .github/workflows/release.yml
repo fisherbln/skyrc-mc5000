@@ -1,0 +1,39 @@
+name: Release
+
+# Publish a GitHub release whenever the integration's version changes on main,
+# so Home Assistant's Marketplace (HACS) offers an update only for real
+# integration releases, not for every commit (docs, bench app).
+on:
+  push:
+    branches: [main]
+    paths: [custom_components/skyrc_mc5000/manifest.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: version
+        run: echo "tag=v$(jq -r .version custom_components/skyrc_mc5000/manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v tag="${{ steps.version.outputs.tag }}" '
+            $0 ~ "^## " { if (found) exit; if ($2 == tag) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || echo "See CHANGELOG.md." > notes.md
+      - name: Create the release if it doesn't exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already released"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md
+          fi
