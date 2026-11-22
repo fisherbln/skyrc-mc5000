@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QFont, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -825,6 +825,13 @@ class MainWindow(QMainWindow):
         self.stop_all = QPushButton("Stop all")
         self.stop_all.setObjectName("stop")
         self.stop_all.clicked.connect(self._stop_all)
+        # Full screen has no title bar, so the window needs its own way out.
+        # Closing only closes the app: Home Assistant keeps running the charger.
+        close_btn = QPushButton("Close")
+        close_btn.setToolTip("Close MC5000 Bench (charging carries on)")
+        close_btn.clicked.connect(self.close)
+        QShortcut(QKeySequence("Ctrl+Q"), self, activated=self.close)
+        QShortcut(QKeySequence("F11"), self, activated=self._toggle_fullscreen)
         header.addWidget(title)
         header.addSpacing(12)
         header.addWidget(self.dot)
@@ -836,6 +843,8 @@ class MainWindow(QMainWindow):
         header.addWidget(charger_btn)
         header.addWidget(settings_btn)
         header.addWidget(self.stop_all)
+        header.addSpacing(12)
+        header.addWidget(close_btn)
         root.addLayout(header)
 
         banner_row = QHBoxLayout()
@@ -1031,6 +1040,12 @@ class MainWindow(QMainWindow):
             save_settings(self.settings)
             if self.settings.complete:
                 self.client.connect_to(self.settings.url, self.settings.token, self.settings.verify_tls)
+
+    def _toggle_fullscreen(self) -> None:
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
     def closeEvent(self, event: Any) -> None:  # noqa: N802 - Qt name
         self.client.shutdown()

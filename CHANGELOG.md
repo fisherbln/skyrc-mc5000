@@ -3,6 +3,10 @@
 Releases of the `skyrc_mc5000` integration. A release is published automatically when
 the version in `custom_components/skyrc_mc5000/manifest.json` changes on main.
 
+## MC5000 Bench 0.5.2
+
+- A Close button at the top right, Ctrl+Q to close and F11 to toggle full screen (full screen has no title bar to close it from).
+
 ## v0.5.1
 
 **Integration**

@@ -346,3 +346,22 @@ def test_charger_settings_and_usb(qapp, tmp_path, monkeypatch):
     window._settings_dialog = None
     dialog.done(0)
     window.close()
+
+
+def test_close_button_and_shortcuts(qapp, tmp_path):
+    from PySide6.QtGui import QShortcut
+    from PySide6.QtWidgets import QPushButton
+
+    from mc5000_bench import app as appmod
+
+    window = appmod.MainWindow()
+    window.show()
+    assert [b for b in window.findChildren(QPushButton) if b.text() == "Close"]
+    keys = {s.key().toString() for s in window.findChildren(QShortcut)}
+    assert {"Ctrl+Q", "F11"} <= keys
+    window._toggle_fullscreen()
+    assert window.isFullScreen()
+    window._toggle_fullscreen()
+    assert not window.isFullScreen()
+    window.close()
+    assert not window.isVisible()

@@ -54,7 +54,9 @@ mc5000-bench --install-desktop   # adds it to the app menu
 ```
 
 Start it from the app menu or with `mc5000-bench` (`--fullscreen` to fill a
-touch screen). On first start it asks for:
+touch screen). Close it with the Close button at the top right or Ctrl+Q; F11
+toggles full screen. Closing the app doesn't affect the charger. On first start it
+asks for:
 
 - **Address**: your Home Assistant URL, e.g. `http://192.168.1.20:8123`. Prefer the
   IP address (or a DNS name): `homeassistant.local` needs mDNS, which plain Debian
