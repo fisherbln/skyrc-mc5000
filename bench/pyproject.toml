@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mc5000-bench"
+version = "0.1.0"
+description = "Touch-friendly desktop controller for a SkyRC MC5000 charger, through Home Assistant"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6-Essentials>=6.6",
+    "websockets>=12",
+]
+
+[project.scripts]
+mc5000-bench = "mc5000_bench.app:main"
+
+[project.urls]
+Homepage = "https://github.com/fisherbln/skyrc-mc5000"
+
+[tool.setuptools]
+packages = ["mc5000_bench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,57 @@
+# MC5000 Bench
+
+A touch-friendly Linux desktop app for a SkyRC MC5000 that's set up in Home
+Assistant with the `skyrc_mc5000` integration from this repository.
+
+Home Assistant keeps its Bluetooth connection to the charger. This app never talks
+Bluetooth: it reads the charger's entities and sends commands through Home
+Assistant's WebSocket API, so you can use it alongside the dashboard.
+
+![MC5000 Bench](screenshot.png)
+
+- Four slot cards with live voltage, current, mAh, time and internal resistance.
+- A preset picker on every slot: pick "Eneloop charge" or "Li-ion storage", press
+  Start, confirm.
+- Presets you can add, copy, reorder and edit (battery type, mode, currents,
+  capacity, storage voltage, discharge cutoff, cycles). The modes offered follow
+  what the charger allows for each chemistry, and currents are limited to what
+  the integration accepts.
+- Each slot remembers how its last run ended (Done, Stopped or the charger's
+  error) with the final mAh and time, even though the charger itself zeroes the
+  counter on an error. Runs are only recorded while the app is open.
+- Stop per slot, Stop all, and a banner with a Reconnect button when Home
+  Assistant's charger connection is paused for the SkyRC app.
+
+## Install (Debian / Ubuntu)
+
+```sh
+sudo apt install pipx git libxcb-cursor0
+pipx ensurepath
+pipx install "git+https://github.com/fisherbln/skyrc-mc5000.git#subdirectory=bench"
+mc5000-bench --install-desktop   # adds it to the app menu
+```
+
+Start it from the app menu or with `mc5000-bench` (`--fullscreen` to fill a
+touch screen). On first start it asks for:
+
+- **Address**: your Home Assistant URL, e.g. `http://homeassistant.local:8123`.
+- **Access token**: in Home Assistant open your profile → Security →
+  Long-lived access tokens → Create token.
+
+Update later with `pipx upgrade mc5000-bench`.
+
+## Files
+
+Everything lives in `~/.config/mc5000-bench/`: `settings.json` (address and
+token, readable only by you), `presets.json`, `selection.json` (each slot's
+chosen preset) and `results.json` (last run per slot).
+
+## Development
+
+```sh
+cd bench
+python3 -m venv .venv && .venv/bin/pip install -e . pytest
+QT_QPA_PLATFORM=offscreen PYTHONPATH=tests .venv/bin/pytest
+```
+
+The tests run the app against a small fake Home Assistant (`tests/fakeha.py`).

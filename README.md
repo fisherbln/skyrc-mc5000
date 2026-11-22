@@ -85,6 +85,15 @@ must exist for the chemistry. The integration uses the MC5000 support in
 the MC3000 integration (`skyrc_mc3000`) until that change is released, because both use
 the `skyrc-ble` package.
 
+## Bench app (Linux desktop)
+
+[`bench/`](bench/) holds **MC5000 Bench**, a touch-friendly desktop app that
+controls the charger through Home Assistant (it never takes the Bluetooth link
+away from HA): live slot readings, a preset picker per slot, editable presets and
+the last result of each run. Install it with
+`pipx install "git+https://github.com/fisherbln/skyrc-mc5000.git#subdirectory=bench"`;
+see [bench/README.md](bench/README.md).
+
 ## Safety
 
 You are sending charge programs to a lithium-capable charger. The CLI refuses charge

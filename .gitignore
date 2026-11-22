@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 *.apk
 .pytest_cache/
+build/
+*.egg-info/
